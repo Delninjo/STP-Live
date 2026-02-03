@@ -2,7 +2,16 @@
 
 import { useEffect, useState } from "react";
 
-type Tab = "Vrijeme" | "Kamera" | "YouTube" | "Žičara";
+const DOGOVORI_API_URL =
+  "https://script.google.com/macros/s/AKfycbyiv5YJurkbkzIARVuSIJnKU7jnyzRYq--fd2m6YkhkpVOXL1Oak5qRkjPwpfTHnofM/exec";
+
+const DOGOVORI_SECRET = "STP123";
+
+// imena vas 5 (možeš ih promijeniti kad god želiš)
+const PREDEFINED_NAMES = ["Denis", "Ciba", "Szabo", "Magić", "Kerrdog"];
+
+
+type Tab = "Vrijeme" | "Kamera" | "Dogovori" | "YouTube" | "Žičara";
 
 export default function Tabs() {
   const [tab, setTab] = useState<Tab>("Vrijeme");
@@ -10,8 +19,9 @@ export default function Tabs() {
   return (
     <>
       <div className="tabs">
-        {(["Vrijeme", "Kamera", "YouTube", "Žičara"] as Tab[]).map((t) => (
-          <button
+        {(["Vrijeme", "Kamera", "Dogovori", "YouTube", "Žičara"] as Tab[]).map((t) => (
+
+      <button
             key={t}
             onClick={() => setTab(t)}
             className={`${"tab"} ${tab === t ? "tabActive" : ""}`}
@@ -23,6 +33,7 @@ export default function Tabs() {
 
       {tab === "Vrijeme" && <Weather />}
       {tab === "Kamera" && <Camera />}
+      {tab === "Dogovori" && <Dogovori />}
       {tab === "YouTube" && <YouTubeLatest />}
       {tab === "Žičara" && <Cablecar />}
     </>
@@ -331,3 +342,105 @@ function Cablecar() {
     </section>
   );
 }
+function Dogovori() {
+  const [items, setItems] = useState<any[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [nameMode, setNameMode] = useState<"list" | "custom">("list");
+  const [name, setName] = useState(PREDEFINED_NAMES[0] ?? "");
+  const [customName, setCustomName] = useState("");
+  const [note, setNote] = useState("");
+
+  const load = async () => {
+    try {
+      const res = await fetch(DOGOVORI_API_URL, { cache: "no-store" });
+      const data = await res.json();
+      setItems(data.items ?? []);
+    } catch {
+      setErr("Ne mogu dohvatiti dogovore.");
+    }
+  };
+
+  const add = async () => {
+    const finalName = nameMode === "custom" ? customName.trim() : name;
+    if (!date || !time || !finalName) {
+      setErr("Upiši datum, vrijeme i ime.");
+      return;
+    }
+
+    await fetch(DOGOVORI_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        secret: DOGOVORI_SECRET,
+        date,
+        time,
+        name: finalName,
+        note,
+      }),
+    });
+
+    setNote("");
+    load();
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  useRefreshOnForeground(load);
+
+  return (
+    <section>
+      <Card title="Dogovori">
+        {err && <div style={{ color: "#ff6b8a" }}>{err}</div>}
+
+        <input className="inp" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <input className="inp" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+
+        <select className="inp" value={name} onChange={(e) => setName(e.target.value)}>
+          {PREDEFINED_NAMES.map((n) => (
+            <option key={n}>{n}</option>
+          ))}
+          <option value="">Drugo...</option>
+        </select>
+
+        {name === "" && (
+          <input
+            className="inp"
+            placeholder="Upiši ime"
+            value={customName}
+            onChange={(e) => setCustomName(e.target.value)}
+          />
+        )}
+
+        <input
+          className="inp"
+          placeholder="Napomena (opcionalno)"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+
+        <button className="btn btnPrimary" onClick={add}>
+          Upiši dogovor
+        </button>
+      </Card>
+
+      <Card title="Popis">
+        {items.length === 0 ? (
+          <div className="small">Nema dogovora.</div>
+        ) : (
+          items.map((x) => (
+            <div key={x.id} style={{ padding: "6px 0" }}>
+              <b>{x.date} {x.time}</b> — {x.name}
+              {x.note && <div className="small">{x.note}</div>}
+            </div>
+          ))
+        )}
+      </Card>
+    </section>
+  );
+}
+
