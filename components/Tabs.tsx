@@ -567,14 +567,14 @@ function Dogovori() {
         </div>
       </Card>
 
-     <Card title="Popis">
+    <Card title="Popis">
   {items.length === 0 ? (
     <div className="small">Nema dogovora.</div>
   ) : (
     items.map((x) => {
       const id = String(x.id);
       const d = String(x.date || "").slice(0, 10);
-      const t = String(x.time || "").slice(0, 5);
+      const t = normalizeHHMM(x.time); // <-- BITNO
       const nm = String(x.name || "");
       const nt = String(x.note || "");
 
@@ -584,6 +584,7 @@ function Dogovori() {
           style={{
             padding: "12px 0",
             borderTop: "1px solid rgba(255,255,255,0.08)",
+            opacity: busy ? 0.7 : 1,
           }}
         >
           <div>
@@ -591,6 +592,7 @@ function Dogovori() {
               {d} {t}
             </b>{" "}
             — {nm}
+
             {nt && (
               <div className="small" style={{ marginTop: 4 }}>
                 {nt}
@@ -598,19 +600,13 @@ function Dogovori() {
             )}
           </div>
 
-          {/* EDIT / DELETE – SIGURNO VIDLJIVO */}
-          <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-            <button
-              className="btn"
-              onClick={() => startEdit(x)}
-            >
+          {/* EDIT / DELETE */}
+          <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+            <button className="btn" onClick={() => startEdit(x)} disabled={busy}>
               Uredi
             </button>
 
-            <button
-              className="btn"
-              onClick={() => del(id)}
-            >
+            <button className="btn" onClick={() => del(id)} disabled={busy}>
               Obriši
             </button>
           </div>
