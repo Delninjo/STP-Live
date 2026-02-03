@@ -1,54 +1,81 @@
 import { NextResponse } from "next/server";
 
-const SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbybYIkCdnKEmiUw7V_RFIOMjMMrDptsjuXGV528uqdErI3g1aBggrTZwL7W8mwMZ7PP5Q/exec";
-
-
-function toJson(text: string) {
-  const t = (text || "").trim();
-
-  // Ako Google vrati HTML (login/redirect), objasni
-  if (t.startsWith("<!DOCTYPE") || t.startsWith("<html") || t.startsWith("<")) {
-    return {
-      error: "apps_script_returned_html",
-      hint: "Apps Script mora biti Deploy: Execute as = Me, Who has access = Anyone (public). Inace Google vrati login HTML pa fetch puca.",
-    };
-  }
-
-  try {
-    return JSON.parse(t);
-  } catch {
-    return { error: "invalid_json_from_apps_script", raw: t.slice(0, 200) };
-  }
-}
+// ✅ OVDJE zalijepi TOČAN URL koji ti u browseru daje {"items":[]}
+const APPS_SCRIPT_URL =
+  "PASTE_TVOJ_GOOGLEUSERCONTENT_EXEC_URL_OVDJE";
 
 export async function GET() {
   try {
-    const res = await fetch(SCRIPT_URL, { cache: "no-store" });
-    const text = await res.text();
-    const data = toJson(text);
-    return NextResponse.json(data, { status: res.ok ? 200 : 502 });
-  } catch {
-    return NextResponse.json({ error: "proxy_get_failed" }, { status: 502 });
+    const r = await fetch(APPS_SCRIPT_URL, {
+      method: "GET",
+      cache: "no-store",
+      redirect: "follow",
+    });
+
+    const ct = r.headers.get("content-type") || "";
+    const text = await r.text();
+
+    // Ako Google vrati HTML (login/consent), to je problem s deployem/URL-om
+    if (ct.includes("text/html") || text.trim().startsWith("<")) {
+      return NextResponse.json(
+        {
+          error: "apps_script_returned_html",
+          hint:
+            "Apps Script mora biti Deploy: Execute as = Me, Who has access = Anyone (public). Također provjeri da APPS_SCRIPT_URL u route.ts koristi TOČAN /exec URL koji radi u incognitu.",
+        },
+        { status: 502 }
+      );
+    }
+
+    // normalno JSON
+    return new NextResponse(text, {
+      status: 200,
+      headers: { "content-type": "application/json; charset=utf-8" },
+    });
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: "proxy_failed", details: String(e) },
+      { status: 502 }
+    );
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const body = await req.text();
+    const body = await req.json();
 
-    const res = await fetch(SCRIPT_URL, {
+    const r = await fetch(APPS_SCRIPT_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
       cache: "no-store",
+      redirect: "follow",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
     });
 
-    const text = await res.text();
-    const data = toJson(text);
-    return NextResponse.json(data, { status: res.ok ? 200 : 502 });
-  } catch {
-    return NextResponse.json({ error: "proxy_post_failed" }, { status: 502 });
+    const ct = r.headers.get("content-type") || "";
+    const text = await r.text();
+
+    if (ct.includes("text/html") || text.trim().startsWith("<")) {
+      return NextResponse.json(
+        {
+          error: "apps_script_returned_html",
+          hint:
+            "Google vraća HTML (login/consent). Provjeri da je web app public (Anyone) i da APPS_SCRIPT_URL koristi najnoviji deployani /exec URL.",
+        },
+        { status: 502 }
+      );
+    }
+
+    return new NextResponse(text, {
+      status: 200,
+      headers: { "content-type": "application/json; charset=utf-8" },
+    });
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: "proxy_failed", details: String(e) },
+      { status: 502 }
+    );
   }
 }
-
