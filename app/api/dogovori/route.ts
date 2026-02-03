@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 const SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbyiv5YJurkbkzIARVuSIJnKU7jnyzRYq--fd2m6YkhkpVOXL1Oak5qRkjPwpfTHnofM/exec";
+  "https://script.google.com/macros/s/AKfycbybYIkCdnKEmiUw7V_RFIOMjMMrDptsjuXGV528uqdErI3g1aBggrTZwL7W8mwMZ7PP5Q/exec";
+
 
 function toJson(text: string) {
   const t = (text || "").trim();
