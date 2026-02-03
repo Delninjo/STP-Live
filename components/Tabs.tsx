@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 const DOGOVORI_API_URL =
   "https://script.google.com/macros/s/AKfycbyiv5YJurkbkzIARVuSIJnKU7jnyzRYq--fd2m6YkhkpVOXL1Oak5qRkjPwpfTHnofM/exec";
@@ -9,7 +9,6 @@ const DOGOVORI_SECRET = "STP123";
 
 // imena vas 5 (možeš ih promijeniti kad god želiš)
 const PREDEFINED_NAMES = ["Denis", "Ciba", "Szabo", "Magić", "Kerrdog"];
-
 
 type Tab = "Vrijeme" | "Kamera" | "Dogovori" | "YouTube" | "Žičara";
 
@@ -20,8 +19,7 @@ export default function Tabs() {
     <>
       <div className="tabs">
         {(["Vrijeme", "Kamera", "Dogovori", "YouTube", "Žičara"] as Tab[]).map((t) => (
-
-      <button
+          <button
             key={t}
             onClick={() => setTab(t)}
             className={`${"tab"} ${tab === t ? "tabActive" : ""}`}
@@ -47,6 +45,35 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
       {children}
     </div>
   );
+}
+
+function Row({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="row">
+      <div className="small" style={{ fontSize: 13 }}>
+        {k}
+      </div>
+      <div style={{ fontWeight: 800 }}>{v}</div>
+    </div>
+  );
+}
+
+/** Refresh kad se app/tab vrati u foreground */
+function useRefreshOnForeground(cb: () => void) {
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") cb();
+    };
+    const onFocus = () => cb();
+
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [cb]);
 }
 
 function Camera() {
@@ -79,7 +106,7 @@ function Camera() {
                 borderRadius: 16,
                 overflow: "hidden",
                 border: "1px solid rgba(255,255,255,0.12)",
-                background: "rgba(0,0,0,0.25)"
+                background: "rgba(0,0,0,0.25)",
               }}
             >
               <iframe
@@ -156,7 +183,9 @@ function Weather() {
           <Row k="Temperatura" v={`${now.tempC} °C`} />
           <Row k="Vjetar" v={`${now.windDir} ${now.windMs} m/s`} />
           <Row k="Stanje" v={`${now.condition}`} />
-          <div className="small" style={{ marginTop: 10 }}>Ažurirano: {now.updatedAt}</div>
+          <div className="small" style={{ marginTop: 10 }}>
+            Ažurirano: {now.updatedAt}
+          </div>
         </Card>
       )}
 
@@ -176,7 +205,9 @@ function Weather() {
                   }}
                 >
                   <div style={{ fontWeight: 900 }}>{h.time.slice(11, 16)}</div>
-                  <div style={{ marginTop: 6, fontSize: 18, fontWeight: 900 }}>{h.tempC}°</div>
+                  <div style={{ marginTop: 6, fontSize: 18, fontWeight: 900 }}>
+                    {h.tempC}°
+                  </div>
                   <div className="small">vjetar {h.windMs} m/s</div>
                 </div>
               ))}
@@ -185,12 +216,19 @@ function Weather() {
 
           <Card title="Sljedećih 7 dana">
             {fc.daily.map((d: any) => (
-              <div key={d.date} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+              <div
+                key={d.date}
+                style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}
+              >
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <div style={{ fontWeight: 900 }}>{d.date}</div>
-                  <div style={{ fontWeight: 900 }}>{d.minC}° / {d.maxC}°</div>
+                  <div style={{ fontWeight: 900 }}>
+                    {d.minC}° / {d.maxC}°
+                  </div>
                 </div>
-                <div className="small" style={{ marginTop: 4 }}>vjetar max {d.windMaxMs} m/s</div>
+                <div className="small" style={{ marginTop: 4 }}>
+                  vjetar max {d.windMaxMs} m/s
+                </div>
               </div>
             ))}
           </Card>
@@ -237,7 +275,13 @@ function YouTubeLatest() {
         {err && <p style={{ color: "#ff5a7a" }}>{err}</p>}
         {items.length === 0 && !err && <div className="small">Učitavam…</div>}
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+            gap: 12,
+          }}
+        >
           {items.slice(0, 6).map((v) => (
             <a
               key={v.url}
@@ -258,7 +302,11 @@ function YouTubeLatest() {
               )}
               <div style={{ padding: 10 }}>
                 <div style={{ fontWeight: 900, lineHeight: 1.2 }}>{v.title}</div>
-                {v.published && <div className="small" style={{ marginTop: 6 }}>{String(v.published).slice(0, 10)}</div>}
+                {v.published && (
+                  <div className="small" style={{ marginTop: 6 }}>
+                    {String(v.published).slice(0, 10)}
+                  </div>
+                )}
               </div>
             </a>
           ))}
@@ -309,20 +357,35 @@ function Cablecar() {
       {hours && (
         <Card title="Radno vrijeme (danas)">
           {hours.rows.map((r: any) => (
-            <div key={r.station} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+            <div
+              key={r.station}
+              style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}
+            >
               <div style={{ fontWeight: 900 }}>{r.station}</div>
-              <div className="small" style={{ marginTop: 4 }}>Prvi: {r.first} • Zadnji: {r.last}</div>
+              <div className="small" style={{ marginTop: 4 }}>
+                Prvi: {r.first} • Zadnji: {r.last}
+              </div>
             </div>
           ))}
-          <div className="small" style={{ marginTop: 10 }}>Izvor: zicarasljeme.hr</div>
+          <div className="small" style={{ marginTop: 10 }}>
+            Izvor: zicarasljeme.hr
+          </div>
         </Card>
       )}
 
       {notices.length > 0 && (
         <Card title="Zadnje obavijesti">
           {notices.slice(0, 6).map((x) => (
-            <div key={x.url} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-              <a href={x.url} target="_blank" rel="noreferrer" style={{ fontWeight: 900, color: "var(--text)" }}>
+            <div
+              key={x.url}
+              style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}
+            >
+              <a
+                href={x.url}
+                target="_blank"
+                rel="noreferrer"
+                style={{ fontWeight: 900, color: "var(--text)" }}
+              >
                 {x.title}
               </a>
               {x.date && <div className="small" style={{ marginTop: 4 }}>{x.date}</div>}
@@ -342,18 +405,19 @@ function Cablecar() {
     </section>
   );
 }
+
 function Dogovori() {
   const [items, setItems] = useState<any[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
-  const [nameMode, setNameMode] = useState<"list" | "custom">("list");
   const [name, setName] = useState(PREDEFINED_NAMES[0] ?? "");
   const [customName, setCustomName] = useState("");
   const [note, setNote] = useState("");
 
   const load = async () => {
+    setErr(null);
     try {
       const res = await fetch(DOGOVORI_API_URL, { cache: "no-store" });
       const data = await res.json();
@@ -364,26 +428,39 @@ function Dogovori() {
   };
 
   const add = async () => {
-    const finalName = nameMode === "custom" ? customName.trim() : name;
+    setErr(null);
+    const finalName = name === "" ? customName.trim() : name;
+
     if (!date || !time || !finalName) {
       setErr("Upiši datum, vrijeme i ime.");
       return;
     }
 
-    await fetch(DOGOVORI_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        secret: DOGOVORI_SECRET,
-        date,
-        time,
-        name: finalName,
-        note,
-      }),
-    });
+    try {
+      const res = await fetch(DOGOVORI_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          secret: DOGOVORI_SECRET,
+          date,
+          time,
+          name: finalName,
+          note: note.trim(),
+        }),
+      }).then((r) => r.json());
 
-    setNote("");
-    load();
+      if (res?.error) {
+        setErr(res.error);
+        return;
+      }
+
+      setNote("");
+      setCustomName("");
+      // refresh list
+      await load();
+    } catch {
+      setErr("Ne mogu spremiti dogovor.");
+    }
   };
 
   useEffect(() => {
@@ -395,14 +472,20 @@ function Dogovori() {
   return (
     <section>
       <Card title="Dogovori">
-        {err && <div style={{ color: "#ff6b8a" }}>{err}</div>}
+        {err && <div style={{ color: "#ff6b8a", marginBottom: 8 }}>{err}</div>}
 
+        <div className="small">Datum</div>
         <input className="inp" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+
+        <div className="small" style={{ marginTop: 8 }}>Vrijeme</div>
         <input className="inp" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
 
+        <div className="small" style={{ marginTop: 8 }}>Tko dolazi</div>
         <select className="inp" value={name} onChange={(e) => setName(e.target.value)}>
           {PREDEFINED_NAMES.map((n) => (
-            <option key={n}>{n}</option>
+            <option key={n} value={n}>
+              {n}
+            </option>
           ))}
           <option value="">Drugo...</option>
         </select>
@@ -416,16 +499,22 @@ function Dogovori() {
           />
         )}
 
+        <div className="small" style={{ marginTop: 8 }}>Napomena (opcionalno)</div>
         <input
           className="inp"
-          placeholder="Napomena (opcionalno)"
+          placeholder="npr. Puntijarka / parking / trail"
           value={note}
           onChange={(e) => setNote(e.target.value)}
         />
 
-        <button className="btn btnPrimary" onClick={add}>
-          Upiši dogovor
-        </button>
+        <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button className="btn btnPrimary" onClick={add}>
+            Upiši dogovor
+          </button>
+          <button className="btn" onClick={load}>
+            Osvježi
+          </button>
+        </div>
       </Card>
 
       <Card title="Popis">
@@ -433,9 +522,11 @@ function Dogovori() {
           <div className="small">Nema dogovora.</div>
         ) : (
           items.map((x) => (
-            <div key={x.id} style={{ padding: "6px 0" }}>
-              <b>{x.date} {x.time}</b> — {x.name}
-              {x.note && <div className="small">{x.note}</div>}
+            <div key={x.id} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+              <div style={{ fontWeight: 900 }}>
+                {x.date} {x.time} — {x.name}
+              </div>
+              {x.note && <div className="small" style={{ marginTop: 4 }}>{x.note}</div>}
             </div>
           ))
         )}
@@ -443,4 +534,3 @@ function Dogovori() {
     </section>
   );
 }
-
