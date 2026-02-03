@@ -1,40 +1,57 @@
 import { NextResponse } from "next/server";
 
-// ✅ OVDJE zalijepi TOČAN URL koji ti u browseru daje {"items":[]}
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 const APPS_SCRIPT_URL =
-  "PASTE_TVOJ_GOOGLEUSERCONTENT_EXEC_URL_OVDJE";
+  "https://script.google.com/macros/s/AKfycbyiv5YJurkbkzIARVuSIJnKU7jnyzRYq--fd2m6YkhkpVOXL1Oak5qRkjPwpfTHnofM/exec";
+
+async function fetchWithTimeout(input: string, init: RequestInit, ms = 15000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+      redirect: "follow",
+      cache: "no-store",
+    });
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+function isHtml(text: string, ct: string) {
+  const t = text.trim();
+  return ct.includes("text/html") || t.startsWith("<!doctype") || t.startsWith("<html") || t.startsWith("<");
+}
 
 export async function GET() {
   try {
-    const r = await fetch(APPS_SCRIPT_URL, {
-      method: "GET",
-      cache: "no-store",
-      redirect: "follow",
-    });
-
+    const r = await fetchWithTimeout(APPS_SCRIPT_URL, { method: "GET" });
     const ct = r.headers.get("content-type") || "";
     const text = await r.text();
 
-    // Ako Google vrati HTML (login/consent), to je problem s deployem/URL-om
-    if (ct.includes("text/html") || text.trim().startsWith("<")) {
+    if (isHtml(text, ct)) {
       return NextResponse.json(
         {
           error: "apps_script_returned_html",
+          status: r.status,
           hint:
-            "Apps Script mora biti Deploy: Execute as = Me, Who has access = Anyone (public). Također provjeri da APPS_SCRIPT_URL u route.ts koristi TOČAN /exec URL koji radi u incognitu.",
+            "Apps Script Web App mora biti Deploy: Execute as = Me, Who has access = Anyone. Ako si mijenjao kod, napravi novi Deploy (New deployment) i koristi njegov /exec URL.",
+          sample: text.slice(0, 220),
         },
         { status: 502 }
       );
     }
 
-    // normalno JSON
     return new NextResponse(text, {
-      status: 200,
+      status: r.status,
       headers: { "content-type": "application/json; charset=utf-8" },
     });
   } catch (e: any) {
     return NextResponse.json(
-      { error: "proxy_failed", details: String(e) },
+      { error: "proxy_failed", details: String(e?.message || e) },
       { status: 502 }
     );
   }
@@ -42,39 +59,37 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const bodyText = await req.text();
 
-    const r = await fetch(APPS_SCRIPT_URL, {
+    const r = await fetchWithTimeout(APPS_SCRIPT_URL, {
       method: "POST",
-      cache: "no-store",
-      redirect: "follow",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(body),
+      headers: { "content-type": "application/json" },
+      body: bodyText,
     });
 
     const ct = r.headers.get("content-type") || "";
     const text = await r.text();
 
-    if (ct.includes("text/html") || text.trim().startsWith("<")) {
+    if (isHtml(text, ct)) {
       return NextResponse.json(
         {
           error: "apps_script_returned_html",
+          status: r.status,
           hint:
-            "Google vraća HTML (login/consent). Provjeri da je web app public (Anyone) i da APPS_SCRIPT_URL koristi najnoviji deployani /exec URL.",
+            "Google vraća HTML (login/consent). Provjeri Deploy postavke: Execute as = Me, Who has access = Anyone.",
+          sample: text.slice(0, 220),
         },
         { status: 502 }
       );
     }
 
     return new NextResponse(text, {
-      status: 200,
+      status: r.status,
       headers: { "content-type": "application/json; charset=utf-8" },
     });
   } catch (e: any) {
     return NextResponse.json(
-      { error: "proxy_failed", details: String(e) },
+      { error: "proxy_failed", details: String(e?.message || e) },
       { status: 502 }
     );
   }
