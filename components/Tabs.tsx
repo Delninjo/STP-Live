@@ -2,17 +2,15 @@
 
 import { useEffect, useState } from "react";
 
-type Tab = "Vrijeme" | "Kamera" | "Žičara";
+type Tab = "Vrijeme" | "Kamera" | "YouTube" | "Žičara";
 
 export default function Tabs() {
-  // ✅ default tab = Vrijeme
   const [tab, setTab] = useState<Tab>("Vrijeme");
 
   return (
     <>
-      {/* ✅ redoslijed tabova: Vrijeme → Kamera → Žičara */}
       <div className="tabs">
-        {(["Vrijeme", "Kamera", "Žičara"] as Tab[]).map((t) => (
+        {(["Vrijeme", "Kamera", "YouTube", "Žičara"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -23,9 +21,9 @@ export default function Tabs() {
         ))}
       </div>
 
-      {/* ✅ redoslijed sadržaja isti kao tabovi */}
       {tab === "Vrijeme" && <Weather />}
       {tab === "Kamera" && <Camera />}
+      {tab === "YouTube" && <YouTubeLatest />}
       {tab === "Žičara" && <Cablecar />}
     </>
   );
@@ -66,19 +64,13 @@ function Camera() {
 function Row({ k, v }: { k: string; v: string }) {
   return (
     <div className="row">
-      <div className="small" style={{ fontSize: 13 }}>
-        {k}
-      </div>
+      <div className="small" style={{ fontSize: 13 }}>{k}</div>
       <div style={{ fontWeight: 800 }}>{v}</div>
     </div>
   );
 }
 
-/**
- * Helper: pozovi callback kad se app/tab vrati u foreground:
- * - visibilitychange (kad se vratiš na tab)
- * - focus (kad browser dobije fokus)
- */
+/** Refresh kad se app/tab vrati u foreground */
 function useRefreshOnForeground(cb: () => void) {
   useEffect(() => {
     const onVisibility = () => {
@@ -100,11 +92,9 @@ function Weather() {
   const [now, setNow] = useState<any>(null);
   const [fc, setFc] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
   const load = async () => {
     setErr(null);
-    setLoading(true);
     try {
       const [n, f] = await Promise.all([
         fetch("/api/weather/now", { cache: "no-store" }).then((r) => r.json()),
@@ -114,32 +104,20 @@ function Weather() {
       setFc(f);
     } catch {
       setErr("Ne mogu dohvatiti podatke.");
-    } finally {
-      setLoading(false);
     }
   };
 
-  // ✅ učitaj odmah + periodično osvježavanje
   useEffect(() => {
     load();
-    const interval = setInterval(load, 10 * 60 * 1000); // svakih 10 min
+    const interval = setInterval(load, 10 * 60 * 1000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ refresh čim app dođe u foreground
-  useRefreshOnForeground(() => {
-    // opcionalno: izbjegni refresh ako već učitava
-    if (!loading) load();
-  });
+  useRefreshOnForeground(load);
 
   return (
     <section>
-      {/* Gumb može ostati za ručni refresh (nije nužan) */}
-      <button className="btn" onClick={load}>
-        {loading ? "Učitavam..." : "Osvježi ručno"}
-      </button>
-
       {err && <p style={{ color: "#ff5a7a" }}>{err}</p>}
 
       {now && (
@@ -147,9 +125,7 @@ function Weather() {
           <Row k="Temperatura" v={`${now.tempC} °C`} />
           <Row k="Vjetar" v={`${now.windDir} ${now.windMs} m/s`} />
           <Row k="Stanje" v={`${now.condition}`} />
-          <div className="small" style={{ marginTop: 10 }}>
-            Ažurirano: {now.updatedAt}
-          </div>
+          <div className="small" style={{ marginTop: 10 }}>Ažurirano: {now.updatedAt}</div>
         </Card>
       )}
 
@@ -181,13 +157,9 @@ function Weather() {
               <div key={d.date} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <div style={{ fontWeight: 900 }}>{d.date}</div>
-                  <div style={{ fontWeight: 900 }}>
-                    {d.minC}° / {d.maxC}°
-                  </div>
+                  <div style={{ fontWeight: 900 }}>{d.minC}° / {d.maxC}°</div>
                 </div>
-                <div className="small" style={{ marginTop: 4 }}>
-                  vjetar max {d.windMaxMs} m/s
-                </div>
+                <div className="small" style={{ marginTop: 4 }}>vjetar max {d.windMaxMs} m/s</div>
               </div>
             ))}
           </Card>
@@ -199,15 +171,85 @@ function Weather() {
   );
 }
 
+function YouTubeLatest() {
+  const [items, setItems] = useState<any[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+
+  const load = async () => {
+    setErr(null);
+    try {
+      const data = await fetch("/api/youtube/latest", { cache: "no-store" }).then((r) => r.json());
+      if (data.error) {
+        setErr(data.error);
+        return;
+      }
+      setItems(data.items ?? []);
+      setUpdatedAt(data.updatedAt ?? null);
+    } catch {
+      setErr("Ne mogu dohvatiti YouTube videe.");
+    }
+  };
+
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, 30 * 60 * 1000); // 30 min
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useRefreshOnForeground(load);
+
+  return (
+    <section>
+      <Card title="Zadnji videi (STP MTB)">
+        {err && <p style={{ color: "#ff5a7a" }}>{err}</p>}
+        {items.length === 0 && !err && <div className="small">Učitavam…</div>}
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+          {items.slice(0, 6).map((v) => (
+            <a
+              key={v.url}
+              href={v.url}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                border: "1px solid rgba(255,255,255,0.10)",
+                borderRadius: 16,
+                overflow: "hidden",
+                background: "rgba(0,0,0,0.20)",
+                color: "var(--text)",
+                textDecoration: "none",
+              }}
+            >
+              {v.thumbnail && (
+                <img src={v.thumbnail} alt={v.title} style={{ width: "100%", display: "block" }} />
+              )}
+              <div style={{ padding: 10 }}>
+                <div style={{ fontWeight: 900, lineHeight: 1.2 }}>{v.title}</div>
+                {v.published && <div className="small" style={{ marginTop: 6 }}>{String(v.published).slice(0, 10)}</div>}
+              </div>
+            </a>
+          ))}
+        </div>
+
+        {updatedAt && <div className="small" style={{ marginTop: 10 }}>Ažurirano: {updatedAt}</div>}
+      </Card>
+
+      <a className="btn" href="https://www.youtube.com/@stpmtb" target="_blank" rel="noreferrer">
+        Otvori kanal
+      </a>
+    </section>
+  );
+}
+
 function Cablecar() {
   const [hours, setHours] = useState<any>(null);
   const [notices, setNotices] = useState<any[]>([]);
   const [err, setErr] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
   const load = async () => {
     setErr(null);
-    setLoading(true);
     try {
       const [h, n] = await Promise.all([
         fetch("/api/cablecar/hours", { cache: "no-store" }).then((r) => r.json()),
@@ -217,30 +259,20 @@ function Cablecar() {
       setNotices(n.items ?? []);
     } catch {
       setErr("Ne mogu dohvatiti podatke o žičari.");
-    } finally {
-      setLoading(false);
     }
   };
 
-  // ✅ učitaj odmah + periodično osvježavanje
   useEffect(() => {
     load();
-    const interval = setInterval(load, 15 * 60 * 1000); // svakih 15 min
+    const interval = setInterval(load, 15 * 60 * 1000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ refresh čim app dođe u foreground
-  useRefreshOnForeground(() => {
-    if (!loading) load();
-  });
+  useRefreshOnForeground(load);
 
   return (
     <section>
-      <button className="btn" onClick={load}>
-        {loading ? "Učitavam..." : "Osvježi ručno"}
-      </button>
-
       {err && <p style={{ color: "#ff5a7a" }}>{err}</p>}
 
       {hours && (
@@ -248,14 +280,10 @@ function Cablecar() {
           {hours.rows.map((r: any) => (
             <div key={r.station} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
               <div style={{ fontWeight: 900 }}>{r.station}</div>
-              <div className="small" style={{ marginTop: 4 }}>
-                Prvi: {r.first} • Zadnji: {r.last}
-              </div>
+              <div className="small" style={{ marginTop: 4 }}>Prvi: {r.first} • Zadnji: {r.last}</div>
             </div>
           ))}
-          <div className="small" style={{ marginTop: 10 }}>
-            Izvor: zicarasljeme.hr
-          </div>
+          <div className="small" style={{ marginTop: 10 }}>Izvor: zicarasljeme.hr</div>
         </Card>
       )}
 
