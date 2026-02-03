@@ -1,371 +1,16 @@
-"use client";
-
-import React, { useEffect, useState } from "react";
-
-// ====== Dogovori: koristi Vercel proxy (NE direktno Google) ======
-const DOGOVORI_API = "/api/dogovori";
-const DOGOVORI_SECRET = "STP123";
-
-// imena vas 5 (možeš promijeniti)
-const PREDEFINED_NAMES = ["Denis", "Ciba", "Szabo", "Magić", "Kerrdog"];
-
-type Tab = "Vrijeme" | "Kamera" | "Dogovori" | "YouTube" | "Žičara";
-
-export default function Tabs() {
-  // prvo Vrijeme, pa Kamera, pa Žičara (i ostalo)
-  const [tab, setTab] = useState<Tab>("Vrijeme");
-
-  return (
-    <>
-      <div className="tabs">
-        {(["Vrijeme", "Kamera", "Dogovori", "YouTube", "Žičara"] as Tab[]).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`${"tab"} ${tab === t ? "tabActive" : ""}`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
-      {tab === "Vrijeme" && <Weather />}
-      {tab === "Kamera" && <Camera />}
-      {tab === "Dogovori" && <Dogovori />}
-      {tab === "YouTube" && <YouTubeLatest />}
-      {tab === "Žičara" && <Cablecar />}
-    </>
-  );
+function fmtDateHR(yyyyMmDd: string) {
+  // "2026-02-07" -> "07.02.2026"
+  const m = String(yyyyMmDd || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return yyyyMmDd;
+  return `${m[3]}.${m[2]}.${m[1]}`;
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="card" style={{ marginBottom: 12 }}>
-      <div className="cardTitle">{title}</div>
-      {children}
-    </div>
-  );
-}
-
-/** Refresh kad tab dođe u foreground */
-function useRefreshOnForeground(fn: () => void) {
-  useEffect(() => {
-    const onVis = () => {
-      if (document.visibilityState === "visible") fn();
-    };
-    document.addEventListener("visibilitychange", onVis);
-    window.addEventListener("focus", fn);
-    return () => {
-      document.removeEventListener("visibilitychange", onVis);
-      window.removeEventListener("focus", fn);
-    };
-  }, [fn]);
-}
-
-function Row({ k, v }: { k: string; v: string }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
-      <div className="small">{k}</div>
-      <div style={{ fontWeight: 900 }}>{v}</div>
-    </div>
-  );
-}
-
-function Camera() {
-  const url = "https://www.livecamcroatia.com/en/camera/sljeme-viewpoint";
-  const [blocked, setBlocked] = useState(false);
-
-  useEffect(() => {
-    const t = setTimeout(() => setBlocked(true), 4000);
-    return () => clearTimeout(t);
-  }, []);
-
-  return (
-    <section>
-      <Card title="Sljeme – Vidikovac (Live)">
-        {!blocked ? (
-          <>
-            <div className="small" style={{ marginBottom: 10 }}>
-              Ako je embed blokiran, prikazat će se gumb za službeni prijenos.
-            </div>
-
-            <div
-              style={{
-                width: "100%",
-                aspectRatio: "16 / 9",
-                borderRadius: 16,
-                overflow: "hidden",
-                border: "1px solid rgba(255,255,255,0.12)",
-                background: "rgba(0,0,0,0.25)",
-              }}
-            >
-              <iframe
-                src={url}
-                title="Sljeme camera"
-                style={{ width: "100%", height: "100%", border: 0 }}
-                allow="autoplay; fullscreen; picture-in-picture"
-                referrerPolicy="no-referrer"
-                onLoad={() => setBlocked(false)}
-              />
-            </div>
-
-            <div style={{ marginTop: 10 }}>
-              <a className="btn" href={url} target="_blank" rel="noreferrer">
-                Otvori u novom tabu
-              </a>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="small" style={{ marginBottom: 10 }}>
-              Embed je vjerojatno blokiran (sigurnosne postavke izvora). Koristi službeni prikaz:
-            </div>
-
-            <a className="btn btnPrimary" href={url} target="_blank" rel="noreferrer">
-              Otvori službeni prijenos
-            </a>
-          </>
-        )}
-      </Card>
-
-      <div className="small">Izvor: LiveCamCroatia</div>
-    </section>
-  );
-}
-
-function Weather() {
-  const [now, setNow] = useState<any>(null);
-  const [fc, setFc] = useState<any>(null);
-  const [err, setErr] = useState<string | null>(null);
-
-  const load = async () => {
-    setErr(null);
-    try {
-      const [n, f] = await Promise.all([
-        fetch("/api/weather/now", { cache: "no-store" }).then((r) => r.json()),
-        fetch("/api/weather/forecast", { cache: "no-store" }).then((r) => r.json()),
-      ]);
-      setNow(n);
-      setFc(f);
-    } catch {
-      setErr("Ne mogu dohvatiti podatke.");
-    }
-  };
-
-  useEffect(() => {
-    load();
-    const interval = setInterval(load, 10 * 60 * 1000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useRefreshOnForeground(load);
-
-  return (
-    <section>
-      {err && <p style={{ color: "#ff5a7a" }}>{err}</p>}
-
-      {now && (
-        <Card title="Sada na Puntijarki (DHMZ)">
-          <Row k="Temperatura" v={`${now.tempC} °C`} />
-          <Row k="Vjetar" v={`${now.windDir} ${now.windMs} m/s`} />
-          <Row k="Stanje" v={`${now.condition}`} />
-          <div className="small" style={{ marginTop: 10 }}>
-            Ažurirano: {now.updatedAt}
-          </div>
-        </Card>
-      )}
-
-      {fc && (
-        <>
-          <Card title="Danas (satno)">
-            <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
-              {fc.hourly.slice(0, 24).map((h: any) => (
-                <div
-                  key={h.time}
-                  style={{
-                    minWidth: 96,
-                    border: "1px solid rgba(255,255,255,0.10)",
-                    borderRadius: 16,
-                    padding: 12,
-                    background: "rgba(0,0,0,0.20)",
-                  }}
-                >
-                  <div style={{ fontWeight: 900 }}>{h.time.slice(11, 16)}</div>
-                  <div style={{ marginTop: 6, fontSize: 18, fontWeight: 900 }}>
-                    {h.tempC}°
-                  </div>
-                  <div className="small">vjetar {h.windMs} m/s</div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <Card title="Sljedećih 7 dana">
-            {fc.daily.map((d: any) => (
-              <div
-                key={d.date}
-                style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <div style={{ fontWeight: 900 }}>{d.date}</div>
-                  <div style={{ fontWeight: 900 }}>
-                    {d.minC}° / {d.maxC}°
-                  </div>
-                </div>
-                <div className="small" style={{ marginTop: 4 }}>
-                  vjetar max {d.windMaxMs} m/s
-                </div>
-              </div>
-            ))}
-          </Card>
-
-          <div className="small">Mjerenja: DHMZ • Prognoza: Open-Meteo</div>
-        </>
-      )}
-    </section>
-  );
-}
-
-function YouTubeLatest() {
-  const [items, setItems] = useState<any[]>([]);
-  const [err, setErr] = useState<string | null>(null);
-  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
-
-  const load = async () => {
-    setErr(null);
-    try {
-      const data = await fetch("/api/youtube/latest", { cache: "no-store" }).then((r) => r.json());
-      if (data.error) {
-        setErr(data.error);
-        return;
-      }
-      setItems(data.items ?? []);
-      setUpdatedAt(data.updatedAt ?? null);
-    } catch {
-      setErr("Ne mogu dohvatiti YouTube videe.");
-    }
-  };
-
-  useEffect(() => {
-    load();
-    const interval = setInterval(load, 30 * 60 * 1000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useRefreshOnForeground(load);
-
-  return (
-    <section>
-      <Card title="Zadnji videi (STP MTB)">
-        {err && <p style={{ color: "#ff5a7a" }}>{err}</p>}
-        {items.length === 0 && !err && <div className="small">Učitavam…</div>}
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
-          {items.slice(0, 6).map((v) => (
-            <a
-              key={v.url}
-              href={v.url}
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                border: "1px solid rgba(255,255,255,0.10)",
-                borderRadius: 16,
-                overflow: "hidden",
-                background: "rgba(0,0,0,0.20)",
-                color: "var(--text)",
-                textDecoration: "none",
-              }}
-            >
-              {v.thumbnail && <img src={v.thumbnail} alt={v.title} style={{ width: "100%", display: "block" }} />}
-              <div style={{ padding: 10 }}>
-                <div style={{ fontWeight: 900, lineHeight: 1.2 }}>{v.title}</div>
-                {v.published && <div className="small" style={{ marginTop: 6 }}>{String(v.published).slice(0, 10)}</div>}
-              </div>
-            </a>
-          ))}
-        </div>
-
-        {updatedAt && <div className="small" style={{ marginTop: 10 }}>Ažurirano: {updatedAt}</div>}
-      </Card>
-
-      <a className="btn" href="https://www.youtube.com/@stpmtb" target="_blank" rel="noreferrer">
-        Otvori kanal
-      </a>
-    </section>
-  );
-}
-
-function Cablecar() {
-  const [hours, setHours] = useState<any>(null);
-  const [notices, setNotices] = useState<any[]>([]);
-  const [err, setErr] = useState<string | null>(null);
-
-  const load = async () => {
-    setErr(null);
-    try {
-      const [h, n] = await Promise.all([
-        fetch("/api/cablecar/hours", { cache: "no-store" }).then((r) => r.json()),
-        fetch("/api/cablecar/notices", { cache: "no-store" }).then((r) => r.json()),
-      ]);
-      setHours(h);
-      setNotices(n.items ?? []);
-    } catch {
-      setErr("Ne mogu dohvatiti podatke o žičari.");
-    }
-  };
-
-  useEffect(() => {
-    load();
-    const interval = setInterval(load, 15 * 60 * 1000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useRefreshOnForeground(load);
-
-  return (
-    <section>
-      {err && <p style={{ color: "#ff5a7a" }}>{err}</p>}
-
-      {hours && (
-        <Card title="Radno vrijeme (danas)">
-          {hours.rows.map((r: any) => (
-            <div key={r.station} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-              <div style={{ fontWeight: 900 }}>{r.station}</div>
-              <div className="small" style={{ marginTop: 4 }}>
-                Prvi: {r.first} • Zadnji: {r.last}
-              </div>
-            </div>
-          ))}
-          <div className="small" style={{ marginTop: 10 }}>Izvor: zicarasljeme.hr</div>
-        </Card>
-      )}
-
-      {notices.length > 0 && (
-        <Card title="Zadnje obavijesti">
-          {notices.slice(0, 6).map((x) => (
-            <div key={x.url} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-              <a href={x.url} target="_blank" rel="noreferrer" style={{ fontWeight: 900, color: "var(--text)" }}>
-                {x.title}
-              </a>
-              {x.date && <div className="small" style={{ marginTop: 4 }}>{x.date}</div>}
-            </div>
-          ))}
-        </Card>
-      )}
-
-      <a
-        className="btn"
-        href="https://www.zicarasljeme.hr/planirani-zastoji-zbog-odrzavanja-zicare/"
-        target="_blank"
-        rel="noreferrer"
-      >
-        Planirani zastoji (službeno)
-      </a>
-    </section>
-  );
+function fmtTimeHHMM(t: string) {
+  const m = String(t || "").match(/^(\d{1,2}):(\d{1,2})/);
+  if (!m) return t;
+  const hh = ("0" + m[1]).slice(-2);
+  const mm = ("0" + m[2]).slice(-2);
+  return `${hh}:${mm}`;
 }
 
 function Dogovori() {
@@ -373,26 +18,47 @@ function Dogovori() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState(""); // "HH:MM" (24h)
+  const [date, setDate] = useState("");   // YYYY-MM-DD
+  const [time, setTime] = useState("");   // HH:mm
   const [name, setName] = useState(PREDEFINED_NAMES[0] ?? "");
   const [customName, setCustomName] = useState("");
   const [note, setNote] = useState("");
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   const load = async () => {
     setErr(null);
     try {
-      const res = await fetch(DOGOVORI_API, { cache: "no-store" });
+      const res = await fetch(DOGOVORI_API_URL, { cache: "no-store" });
       const data = await res.json();
+      if (data.error) {
+        setErr(data.error);
+        return;
+      }
       setItems(data.items ?? []);
-    } catch {
+    } catch (e: any) {
       setErr("Ne mogu dohvatiti dogovore.");
     }
   };
 
-  const add = async () => {
+  useEffect(() => {
+    load();
+  }, []);
+
+  useRefreshOnForeground(load);
+
+  const resetForm = () => {
+    setEditingId(null);
+    setDate("");
+    setTime("");
+    setName(PREDEFINED_NAMES[0] ?? "");
+    setCustomName("");
+    setNote("");
+  };
+
+  const submit = async () => {
     setErr(null);
-    const finalName = name === "" ? customName.trim() : name;
+    const finalName = (name === "" ? customName : name).trim();
 
     if (!date || !time || !finalName) {
       setErr("Upiši datum, vrijeme i ime.");
@@ -401,63 +67,97 @@ function Dogovori() {
 
     setBusy(true);
     try {
-      const res = await fetch(DOGOVORI_API, {
+      const payload: any = {
+        secret: DOGOVORI_SECRET,
+        action: editingId ? "update" : "add",
+        id: editingId || undefined,
+        date,
+        time: fmtTimeHHMM(time), // normalizacija
+        name: finalName,
+        note: note?.trim() || "",
+      };
+
+      const r = await fetch(DOGOVORI_API_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({
-          secret: DOGOVORI_SECRET,
-          date,
-          time, // očekujemo "HH:MM"
-          name: finalName,
-          note,
-        }),
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
       });
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data?.error) {
-        setErr(`Ne mogu sačuvati dogovor. ${data?.error ? `(${data.error})` : ""}`.trim());
+      const data = await r.json();
+      if (!r.ok || data.error) {
+        setErr("Ne mogu sačuvati dogovor. (" + (data.error || r.status) + ")");
         return;
       }
 
-      setNote("");
+      resetForm();
       await load();
-    } catch {
-      setErr("Ne mogu sačuvati dogovor.");
+    } catch (e: any) {
+      setErr("Ne mogu sačuvati dogovor. (network)");
     } finally {
       setBusy(false);
     }
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  const startEdit = (x: any) => {
+    setErr(null);
+    setEditingId(x.id);
+    setDate(String(x.date || ""));
+    setTime(fmtTimeHHMM(String(x.time || "")));
+    // ako nije u predefined, prebaci na custom
+    if (PREDEFINED_NAMES.includes(x.name)) {
+      setName(x.name);
+      setCustomName("");
+    } else {
+      setName("");
+      setCustomName(x.name || "");
+    }
+    setNote(x.note || "");
+  };
 
-  useRefreshOnForeground(load);
+  const remove = async (id: string) => {
+    if (!confirm("Obrisati dogovor?")) return;
+    setErr(null);
+    setBusy(true);
+    try {
+      const r = await fetch(DOGOVORI_API_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ secret: DOGOVORI_SECRET, action: "delete", id }),
+      });
+      const data = await r.json();
+      if (!r.ok || data.error) {
+        setErr("Ne mogu obrisati. (" + (data.error || r.status) + ")");
+        return;
+      }
+      await load();
+    } catch {
+      setErr("Ne mogu obrisati. (network)");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <section>
       <Card title="Dogovori">
-        {err && <div style={{ color: "#ff6b8a", marginBottom: 8 }}>{err}</div>}
+        {err && <div style={{ color: "#ff6b8a", marginBottom: 10 }}>{err}</div>}
 
-        <div className="small" style={{ marginBottom: 6 }}>Datum</div>
+        <label className="small" style={{ display: "block", marginBottom: 6 }}>Datum</label>
         <input className="inp" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
 
-        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>Vrijeme (24h)</div>
+        <label className="small" style={{ display: "block", marginTop: 10, marginBottom: 6 }}>Vrijeme (24h)</label>
         <input
           className="inp"
           type="time"
-          step="60"
           value={time}
+          step={60}
           onChange={(e) => setTime(e.target.value)}
         />
 
-        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>Tko dolazi</div>
+        <label className="small" style={{ display: "block", marginTop: 10, marginBottom: 6 }}>Tko dolazi</label>
         <select className="inp" value={name} onChange={(e) => setName(e.target.value)}>
           {PREDEFINED_NAMES.map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
+            <option key={n} value={n}>{n}</option>
           ))}
           <option value="">Drugo…</option>
         </select>
@@ -468,20 +168,29 @@ function Dogovori() {
             placeholder="Upiši ime"
             value={customName}
             onChange={(e) => setCustomName(e.target.value)}
-            style={{ marginTop: 10 }}
+            style={{ marginTop: 8 }}
           />
         )}
 
-        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>Napomena (opcionalno)</div>
+        <label className="small" style={{ display: "block", marginTop: 10, marginBottom: 6 }}>
+          Napomena (opcionalno)
+        </label>
         <input className="inp" placeholder="npr. Tunel" value={note} onChange={(e) => setNote(e.target.value)} />
 
         <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-          <button className="btn btnPrimary" onClick={add} disabled={busy}>
-            {busy ? "Spremam…" : "Upiši dogovor"}
+          <button className="btn btnPrimary" onClick={submit} disabled={busy}>
+            {editingId ? "Spremi izmjene" : "Upiši dogovor"}
           </button>
+
           <button className="btn" onClick={load} disabled={busy}>
             Osvježi
           </button>
+
+          {editingId && (
+            <button className="btn" onClick={resetForm} disabled={busy}>
+              Odustani
+            </button>
+          )}
         </div>
       </Card>
 
@@ -490,12 +199,32 @@ function Dogovori() {
           <div className="small">Nema dogovora.</div>
         ) : (
           items.map((x) => (
-            <div key={x.id} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-              <b>
-                {x.date} {x.time}
-              </b>{" "}
-              — {x.name}
-              {x.note && <div className="small" style={{ marginTop: 4 }}>{x.note}</div>}
+            <div
+              key={x.id}
+              style={{
+                padding: "10px 0",
+                borderTop: "1px solid rgba(255,255,255,0.08)",
+                display: "flex",
+                gap: 10,
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 900 }}>
+                  {fmtDateHR(String(x.date || ""))} • {fmtTimeHHMM(String(x.time || ""))} — {x.name}
+                </div>
+                {x.note && <div className="small" style={{ marginTop: 4 }}>{x.note}</div>}
+              </div>
+
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn" onClick={() => startEdit(x)} disabled={busy}>
+                  Uredi
+                </button>
+                <button className="btn" onClick={() => remove(x.id)} disabled={busy}>
+                  Obriši
+                </button>
+              </div>
             </div>
           ))
         )}
