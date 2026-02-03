@@ -567,56 +567,59 @@ function Dogovori() {
         </div>
       </Card>
 
-      <Card title="Popis">
-        {items.length === 0 ? (
-          <div className="small">Nema dogovora.</div>
-        ) : (
-          items.map((x) => {
-            const id = String(x.id);
-            const d = String(x.date || "").slice(0, 10);
-            const t = normalizeHHMM(x.time);
-            const nm = String(x.name || "");
-            const nt = String(x.note || "");
+     <Card title="Popis">
+  {items.length === 0 ? (
+    <div className="small">Nema dogovora.</div>
+  ) : (
+    items.map((x) => {
+      const id = String(x.id);
+      const d = String(x.date || "").slice(0, 10);
+      const t = String(x.time || "").slice(0, 5);
+      const nm = String(x.name || "");
+      const nt = String(x.note || "");
 
-            return (
-              <div
-                key={id}
-                style={{
-                  padding: "10px 0",
-                  borderTop: "1px solid rgba(255,255,255,0.08)",
-                  opacity: busy ? 0.7 : 1,
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                  <div>
-                    <b>
-                      {d} • {t}
-                    </b>{" "}
-                    — {nm}
-                    {nt && (
-                      <div className="small" style={{ marginTop: 4 }}>
-                        {nt}
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                    <button className="btn" onClick={() => startEdit(x)} disabled={busy}>
-                      Uredi
-                    </button>
-                    <button className="btn" onClick={() => del(id)} disabled={busy}>
-                      Obriši
-                    </button>
-                  </div>
-                </div>
+      return (
+        <div
+          key={id}
+          style={{
+            padding: "12px 0",
+            borderTop: "1px solid rgba(255,255,255,0.08)",
+          }}
+        >
+          <div>
+            <b>
+              {d} {t}
+            </b>{" "}
+            — {nm}
+            {nt && (
+              <div className="small" style={{ marginTop: 4 }}>
+                {nt}
               </div>
-            );
-          })
-        )}
-      </Card>
-    </section>
-  );
-}
+            )}
+          </div>
+
+          {/* EDIT / DELETE – SIGURNO VIDLJIVO */}
+          <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+            <button
+              className="btn"
+              onClick={() => startEdit(x)}
+            >
+              Uredi
+            </button>
+
+            <button
+              className="btn"
+              onClick={() => del(id)}
+            >
+              Obriši
+            </button>
+          </div>
+        </div>
+      );
+    })
+  )}
+</Card>
+
 
 // helper: accept ISO time/date strings or "HH:MM" and return "HH:MM"
 function normalizeHHMM(v: any): string {
