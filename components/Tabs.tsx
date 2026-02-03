@@ -1,22 +1,12 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 // ====== PODESI OVO ======
 const DOGOVORI_SECRET = "STP123";
-// Predefinirana imena
 const PREDEFINED_NAMES = ["Denis", "Ciba", "Szabo", "Magić", "Kerrdog"];
 
 type Tab = "Vrijeme" | "Kamera" | "Dogovori" | "YouTube" | "Žičara";
-
-type Dogovor = {
-  id: string;
-  createdAt?: string;
-  date?: string; // moze biti "YYYY-MM-DD" ili ISO
-  time?: string; // moze biti "HH:MM" ili ISO
-  name?: string;
-  note?: string;
-};
 
 export default function Tabs() {
   const [tab, setTab] = useState<Tab>("Vrijeme");
@@ -43,6 +33,8 @@ export default function Tabs() {
     </>
   );
 }
+
+/* ------------------ UI HELPERS ------------------ */
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -79,7 +71,59 @@ function useRefreshOnForeground(fn: () => void) {
   }, [fn]);
 }
 
-// ===================== CAMERA =====================
+function formatUpdatedAtHR(input: any): string {
+  if (!input) return "";
+  const d = new Date(input);
+  if (isNaN(d.getTime())) return String(input);
+
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+
+  const time = new Intl.DateTimeFormat("hr-HR", { hour: "2-digit", minute: "2-digit" }).format(d);
+
+  if (sameDay) return `danas u ${time}`;
+
+  const date = new Intl.DateTimeFormat("hr-HR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(d);
+
+  return `${date} u ${time}`;
+}
+
+// helper: accept ISO time/date strings or "HH:MM" and return "HH:MM"
+function normalizeHHMM(v: any): string {
+  if (!v) return "";
+  const s = String(v).trim();
+
+  // ISO like 1899-12-30T09:30:00.000Z -> extract HH:MM
+  const mIso = s.match(/T(\d{2}:\d{2}):\d{2}/);
+  if (mIso) return mIso[1];
+
+  // HH:MM or HH:MM:SS
+  const mHM = s.match(/^(\d{1,2}):(\d{2})/);
+  if (mHM) return String(mHM[1]).padStart(2, "0") + ":" + mHM[2];
+
+  // AM/PM e.g. 02:47 AM
+  const mAmPm = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (mAmPm) {
+    let hh = parseInt(mAmPm[1], 10);
+    const mm = mAmPm[2];
+    const ap = mAmPm[3].toUpperCase();
+    if (ap === "PM" && hh < 12) hh += 12;
+    if (ap === "AM" && hh === 12) hh = 0;
+    return String(hh).padStart(2, "0") + ":" + mm;
+  }
+
+  return s;
+}
+
+/* ------------------ CAMERA ------------------ */
+
 function Camera() {
   const url = "https://www.livecamcroatia.com/en/camera/sljeme-viewpoint";
   const [blocked, setBlocked] = useState(false);
@@ -141,7 +185,8 @@ function Camera() {
   );
 }
 
-// ===================== WEATHER =====================
+/* ------------------ WEATHER ------------------ */
+
 function Weather() {
   const [now, setNow] = useState<any>(null);
   const [fc, setFc] = useState<any>(null);
@@ -175,12 +220,12 @@ function Weather() {
       {err && <p style={{ color: "#ff5a7a" }}>{err}</p>}
 
       {now && (
-        <Card title="Sada na Puntijarki (DHMZ)">
+        <Card title="Na vrhu Sljemena (DHMZ)">
           <Row k="Temperatura" v={`${now.tempC} °C`} />
           <Row k="Vjetar" v={`${now.windDir} ${now.windMs} m/s`} />
           <Row k="Stanje" v={`${now.condition}`} />
           <div className="small" style={{ marginTop: 10 }}>
-            Ažurirano: {now.updatedAt}
+            Ažurirano: {formatUpdatedAtHR(now.updatedAt)}
           </div>
         </Card>
       )}
@@ -217,9 +262,7 @@ function Weather() {
                     {d.minC}° / {d.maxC}°
                   </div>
                 </div>
-                <div className="small" style={{ marginTop: 4 }}>
-                  vjetar max {d.windMaxMs} m/s
-                </div>
+                <div className="small" style={{ marginTop: 4 }}>vjetar max {d.windMaxMs} m/s</div>
               </div>
             ))}
           </Card>
@@ -231,7 +274,8 @@ function Weather() {
   );
 }
 
-// ===================== YOUTUBE =====================
+/* ------------------ YOUTUBE ------------------ */
+
 function YouTubeLatest() {
   const [items, setItems] = useState<any[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -286,21 +330,13 @@ function YouTubeLatest() {
               {v.thumbnail && <img src={v.thumbnail} alt={v.title} style={{ width: "100%", display: "block" }} />}
               <div style={{ padding: 10 }}>
                 <div style={{ fontWeight: 900, lineHeight: 1.2 }}>{v.title}</div>
-                {v.published && (
-                  <div className="small" style={{ marginTop: 6 }}>
-                    {String(v.published).slice(0, 10)}
-                  </div>
-                )}
+                {v.published && <div className="small" style={{ marginTop: 6 }}>{String(v.published).slice(0, 10)}</div>}
               </div>
             </a>
           ))}
         </div>
 
-        {updatedAt && (
-          <div className="small" style={{ marginTop: 10 }}>
-            Ažurirano: {updatedAt}
-          </div>
-        )}
+        {updatedAt && <div className="small" style={{ marginTop: 10 }}>Ažurirano: {formatUpdatedAtHR(updatedAt)}</div>}
       </Card>
 
       <a className="btn" href="https://www.youtube.com/@stpmtb" target="_blank" rel="noreferrer">
@@ -310,21 +346,30 @@ function YouTubeLatest() {
   );
 }
 
-// ===================== CABLECAR =====================
+/* ------------------ CABLECAR ------------------ */
+
+type CablecarRow = {
+  station: string;
+  first?: string; // all days
+  lastWeekday?: string; // radni dan
+  lastWeekend?: string; // vikend/blagdan
+};
+
 function Cablecar() {
-  const [hours, setHours] = useState<any>(null);
-  const [notices, setNotices] = useState<any[]>([]);
+  const [rows, setRows] = useState<CablecarRow[]>([]);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const load = async () => {
     setErr(null);
     try {
-      const [h, n] = await Promise.all([
-        fetch("/api/cablecar/hours", { cache: "no-store" }).then((r) => r.json()),
-        fetch("/api/cablecar/notices", { cache: "no-store" }).then((r) => r.json()),
-      ]);
-      setHours(h);
-      setNotices(n.items ?? []);
+      const data = await fetch("/api/cablecar/hours", { cache: "no-store" }).then((r) => r.json());
+      if (data.error) {
+        setErr(`Ne mogu dohvatiti podatke o žičari. (${data.error})`);
+        return;
+      }
+      setRows(data.rows ?? []);
+      setUpdatedAt(data.updatedAt ?? null);
     } catch {
       setErr("Ne mogu dohvatiti podatke o žičari.");
     }
@@ -339,38 +384,85 @@ function Cablecar() {
 
   useRefreshOnForeground(load);
 
+  const todayLabel = useMemo(() => {
+    const d = new Date();
+    const day = d.getDay(); // 0 ned, 6 sub
+    // (bez praznika) – vikend = sub/ned
+    return day === 0 || day === 6 ? "VIKEND / BLAGDAN" : "RADNI DAN";
+  }, []);
+
   return (
     <section>
       {err && <p style={{ color: "#ff5a7a" }}>{err}</p>}
 
-      {hours && (
-        <Card title="Radno vrijeme (danas)">
-          {hours.rows.map((r: any) => (
-            <div key={r.station} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-              <div style={{ fontWeight: 900 }}>{r.station}</div>
-              <div className="small" style={{ marginTop: 4 }}>
-                Prvi: {r.first} • Zadnji: {r.last}
-              </div>
-            </div>
-          ))}
-          <div className="small" style={{ marginTop: 10 }}>
-            Izvor: zicarasljeme.hr
-          </div>
-        </Card>
-      )}
+      <Card title={`Radno vrijeme (danas) • ${todayLabel}`}>
+        {rows.length === 0 ? (
+          <div className="small">Nema podataka.</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {rows.map((r) => (
+              <div
+                key={r.station}
+                style={{
+                  paddingTop: 12,
+                  borderTop: "1px solid rgba(255,255,255,0.08)",
+                }}
+              >
+                <div style={{ fontWeight: 900, fontSize: 18 }}>{r.station}</div>
 
-      {notices.length > 0 && (
-        <Card title="Zadnje obavijesti">
-          {notices.slice(0, 6).map((x) => (
-            <div key={x.url} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-              <a href={x.url} target="_blank" rel="noreferrer" style={{ fontWeight: 900, color: "var(--text)" }}>
-                {x.title}
-              </a>
-              {x.date && <div className="small" style={{ marginTop: 4 }}>{x.date}</div>}
-            </div>
-          ))}
-        </Card>
-      )}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                    gap: 10,
+                    marginTop: 10,
+                  }}
+                >
+                  <div
+                    style={{
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      borderRadius: 14,
+                      padding: 10,
+                      background: "rgba(0,0,0,0.18)",
+                    }}
+                  >
+                    <div className="small">Prvi polazak</div>
+                    <div style={{ fontWeight: 900, fontSize: 18 }}>{r.first ?? "—"}</div>
+                  </div>
+
+                  <div
+                    style={{
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      borderRadius: 14,
+                      padding: 10,
+                      background: "rgba(0,0,0,0.18)",
+                    }}
+                  >
+                    <div className="small">Zadnji (radni dan)</div>
+                    <div style={{ fontWeight: 900, fontSize: 18 }}>{r.lastWeekday ?? "—"}</div>
+                  </div>
+
+                  <div
+                    style={{
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      borderRadius: 14,
+                      padding: 10,
+                      background: "rgba(0,0,0,0.18)",
+                    }}
+                  >
+                    <div className="small">Zadnji (vikend/blagdan)</div>
+                    <div style={{ fontWeight: 900, fontSize: 18 }}>{r.lastWeekend ?? "—"}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="small" style={{ marginTop: 12 }}>
+          Izvor: zicarasljeme.hr{updatedAt ? ` • Ažurirano: ${formatUpdatedAtHR(updatedAt)}` : ""}
+        </div>
+      </Card>
 
       <a
         className="btn"
@@ -384,9 +476,10 @@ function Cablecar() {
   );
 }
 
-// ===================== DOGOVORI (ADD/EDIT/DELETE) =====================
+/* ------------------ DOGOVORI (ADD/EDIT/DELETE) ------------------ */
+
 function Dogovori() {
-  const [items, setItems] = useState<Dogovor[]>([]);
+  const [items, setItems] = useState<any[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -422,12 +515,11 @@ function Dogovori() {
     setNote("");
   };
 
-  const startEdit = (x: Dogovor) => {
+  const startEdit = (x: any) => {
     setErr(null);
     setEditingId(String(x.id));
-    setDate(normalizeYYYYMMDD(x.date));
+    setDate(String(x.date || "").slice(0, 10));
     setTime(normalizeHHMM(x.time));
-
     const nm = String(x.name || "");
     if (PREDEFINED_NAMES.includes(nm)) {
       setName(nm);
@@ -436,7 +528,6 @@ function Dogovori() {
       setName("");
       setCustomName(nm);
     }
-
     setNote(String(x.note || ""));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -457,7 +548,7 @@ function Dogovori() {
       const payload: any = {
         secret: DOGOVORI_SECRET,
         action,
-        date: normalizeYYYYMMDD(date),
+        date,
         time: normalizeHHMM(time),
         name: finalName,
         note,
@@ -513,7 +604,6 @@ function Dogovori() {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useRefreshOnForeground(load);
@@ -582,7 +672,7 @@ function Dogovori() {
         ) : (
           items.map((x) => {
             const id = String(x.id);
-            const d = normalizeYYYYMMDD(x.date);
+            const d = String(x.date || "").slice(0, 10);
             const t = normalizeHHMM(x.time);
             const nm = String(x.name || "");
             const nt = String(x.note || "");
@@ -593,30 +683,29 @@ function Dogovori() {
                 style={{
                   padding: "12px 0",
                   borderTop: "1px solid rgba(255,255,255,0.08)",
-                  opacity: busy ? 0.7 : 1,
+                  opacity: busy ? 0.75 : 1,
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
-                  <div>
-                    <b>
-                      {d} {t}
-                    </b>{" "}
-                    — {nm}
-                    {nt && (
-                      <div className="small" style={{ marginTop: 4 }}>
-                        {nt}
-                      </div>
-                    )}
-                  </div>
+                <div>
+                  <b>
+                    {d} {t}
+                  </b>{" "}
+                  — {nm}
+                  {nt && (
+                    <div className="small" style={{ marginTop: 4 }}>
+                      {nt}
+                    </div>
+                  )}
+                </div>
 
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <button className="btn" onClick={() => startEdit(x)} disabled={busy}>
-                      Uredi
-                    </button>
-                    <button className="btn" onClick={() => del(id)} disabled={busy}>
-                      Obriši
-                    </button>
-                  </div>
+                {/* EDIT / DELETE */}
+                <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                  <button className="btn" onClick={() => startEdit(x)} disabled={busy}>
+                    Uredi
+                  </button>
+                  <button className="btn" onClick={() => del(id)} disabled={busy}>
+                    Obriši
+                  </button>
                 </div>
               </div>
             );
@@ -625,42 +714,4 @@ function Dogovori() {
       </Card>
     </section>
   );
-}
-
-// ===== Helpers: normalizacija datuma i vremena =====
-function normalizeYYYYMMDD(v: any): string {
-  if (!v) return "";
-  const s = String(v).trim();
-  // ISO "2026-02-06T23:00:00.000Z"
-  const mIso = s.match(/^(\d{4}-\d{2}-\d{2})/);
-  if (mIso) return mIso[1];
-  // već "YYYY-MM-DD"
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  return s.slice(0, 10);
-}
-
-function normalizeHHMM(v: any): string {
-  if (!v) return "";
-  const s = String(v).trim();
-
-  // ISO "1899-12-30T09:30:00.000Z" -> 09:30
-  const mIso = s.match(/T(\d{2}:\d{2}):\d{2}/);
-  if (mIso) return mIso[1];
-
-  // "HH:MM" or "H:MM" or "HH:MM:SS"
-  const mHM = s.match(/^(\d{1,2}):(\d{2})/);
-  if (mHM) return String(mHM[1]).padStart(2, "0") + ":" + mHM[2];
-
-  // "02:47 AM"
-  const mAmPm = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (mAmPm) {
-    let hh = parseInt(mAmPm[1], 10);
-    const mm = mAmPm[2];
-    const ap = mAmPm[3].toUpperCase();
-    if (ap === "PM" && hh < 12) hh += 12;
-    if (ap === "AM" && hh === 12) hh = 0;
-    return String(hh).padStart(2, "0") + ":" + mm;
-  }
-
-  return s;
 }
