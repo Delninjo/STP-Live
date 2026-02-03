@@ -4,7 +4,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const APPS_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbyiv5YJurkbkzIARVuSIJnKU7jnyzRYq--fd2m6YkhkpVOXL1Oak5qRkjPwpfTHnofM/exec";
+  "https://script.google.com/macros/s/AKfycbySPYBJ2zyrhj7uJ7CO2um-UsE1sNVK13nQg0dN101LjSHAfsAGUn-KPE8QGY3pulyvDg/exec";
 
 async function fetchWithTimeout(input: string, init: RequestInit, ms = 15000) {
   const controller = new AbortController();
