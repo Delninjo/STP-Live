@@ -39,53 +39,73 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 }
 
 function Camera() {
+  const url = "https://www.livecamcroatia.com/en/camera/sljeme-viewpoint";
+  const [blocked, setBlocked] = useState(false);
+
+  // Ako iframe ne učita (često zbog X-Frame-Options/CSP), prebacimo na fallback
+  useEffect(() => {
+    const t = setTimeout(() => {
+      // nakon 4s pretpostavimo da je blokirano (praktičan UX)
+      setBlocked(true);
+    }, 4000);
+
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <section>
-      <Card title="Sljeme – Vidikovac">
-        <div className="small" style={{ marginBottom: 10 }}>
-          Otvaramo službenu stranicu kamere (stabilnije od ugrađenog embeda).
-        </div>
+      <Card title="Sljeme – Vidikovac (Live)">
+        {!blocked ? (
+          <>
+            <div className="small" style={{ marginBottom: 10 }}>
+              Ako je embed blokiran, prikazat će se gumb za službeni prijenos.
+            </div>
 
-        <a
-          className="btn btnPrimary"
-          href="https://www.livecamcroatia.com/hr/kamera/sljeme-vidikovac"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Otvori službeni prijenos
-        </a>
+            <div
+              style={{
+                width: "100%",
+                aspectRatio: "16 / 9",
+                borderRadius: 16,
+                overflow: "hidden",
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(0,0,0,0.25)"
+              }}
+            >
+              <iframe
+                src={url}
+                title="Sljeme camera"
+                style={{ width: "100%", height: "100%", border: 0 }}
+                allow="autoplay; fullscreen; picture-in-picture"
+                referrerPolicy="no-referrer"
+                onLoad={() => {
+                  // ako se učita prije timeouta, ostaje embed
+                  setBlocked(false);
+                }}
+              />
+            </div>
+
+            <div style={{ marginTop: 10 }}>
+              <a className="btn" href={url} target="_blank" rel="noreferrer">
+                Otvori u novom tabu
+              </a>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="small" style={{ marginBottom: 10 }}>
+              Embed je vjerojatno blokiran (sigurnosne postavke izvora). Koristi službeni prikaz:
+            </div>
+
+            <a className="btn btnPrimary" href={url} target="_blank" rel="noreferrer">
+              Otvori službeni prijenos
+            </a>
+          </>
+        )}
       </Card>
 
       <div className="small">Izvor: LiveCamCroatia</div>
     </section>
   );
-}
-
-function Row({ k, v }: { k: string; v: string }) {
-  return (
-    <div className="row">
-      <div className="small" style={{ fontSize: 13 }}>{k}</div>
-      <div style={{ fontWeight: 800 }}>{v}</div>
-    </div>
-  );
-}
-
-/** Refresh kad se app/tab vrati u foreground */
-function useRefreshOnForeground(cb: () => void) {
-  useEffect(() => {
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") cb();
-    };
-    const onFocus = () => cb();
-
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("focus", onFocus);
-
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [cb]);
 }
 
 function Weather() {
