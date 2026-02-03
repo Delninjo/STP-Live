@@ -337,21 +337,7 @@ function Cablecar() {
     <section>
       {err && <p style={{ color: "#ff5a7a" }}>{err}</p>}
 
-      {hours && (
-        <Card title="Radno vrijeme (danas)">
-          {hours.rows.map((r: any) => (
-            <div key={r.station} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-              <div style={{ fontWeight: 900 }}>{r.station}</div>
-              <div className="small" style={{ marginTop: 4 }}>
-                Prvi: {r.first} • Zadnji: {r.last}
-              </div>
-            </div>
-          ))}
-          <div className="small" style={{ marginTop: 10 }}>
-            Izvor: zicarasljeme.hr
-          </div>
-        </Card>
-      )}
+      Cablecar()
 
       {notices.length > 0 && (
         <Card title="Zadnje obavijesti">
