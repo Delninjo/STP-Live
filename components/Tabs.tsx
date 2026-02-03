@@ -4,10 +4,19 @@ import React, { useEffect, useState } from "react";
 
 // ====== PODESI OVO ======
 const DOGOVORI_SECRET = "STP123";
-// Predefinirana imena (možeš mijenjati kad god)
+// Predefinirana imena
 const PREDEFINED_NAMES = ["Denis", "Ciba", "Szabo", "Magić", "Kerrdog"];
 
 type Tab = "Vrijeme" | "Kamera" | "Dogovori" | "YouTube" | "Žičara";
+
+type Dogovor = {
+  id: string;
+  createdAt?: string;
+  date?: string; // moze biti "YYYY-MM-DD" ili ISO
+  time?: string; // moze biti "HH:MM" ili ISO
+  name?: string;
+  note?: string;
+};
 
 export default function Tabs() {
   const [tab, setTab] = useState<Tab>("Vrijeme");
@@ -76,10 +85,7 @@ function Camera() {
   const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      // ako nije učitalo u 4s, UX: prikaži fallback
-      setBlocked(true);
-    }, 4000);
+    const t = setTimeout(() => setBlocked(true), 4000);
     return () => clearTimeout(t);
   }, []);
 
@@ -157,7 +163,7 @@ function Weather() {
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 10 * 60 * 1000); // 10 min
+    const interval = setInterval(load, 10 * 60 * 1000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -248,7 +254,7 @@ function YouTubeLatest() {
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 30 * 60 * 1000); // 30 min
+    const interval = setInterval(load, 30 * 60 * 1000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -326,7 +332,7 @@ function Cablecar() {
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 15 * 60 * 1000); // 15 min
+    const interval = setInterval(load, 15 * 60 * 1000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -337,7 +343,21 @@ function Cablecar() {
     <section>
       {err && <p style={{ color: "#ff5a7a" }}>{err}</p>}
 
-      Cablecar()
+      {hours && (
+        <Card title="Radno vrijeme (danas)">
+          {hours.rows.map((r: any) => (
+            <div key={r.station} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+              <div style={{ fontWeight: 900 }}>{r.station}</div>
+              <div className="small" style={{ marginTop: 4 }}>
+                Prvi: {r.first} • Zadnji: {r.last}
+              </div>
+            </div>
+          ))}
+          <div className="small" style={{ marginTop: 10 }}>
+            Izvor: zicarasljeme.hr
+          </div>
+        </Card>
+      )}
 
       {notices.length > 0 && (
         <Card title="Zadnje obavijesti">
@@ -366,7 +386,7 @@ function Cablecar() {
 
 // ===================== DOGOVORI (ADD/EDIT/DELETE) =====================
 function Dogovori() {
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<Dogovor[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -402,11 +422,12 @@ function Dogovori() {
     setNote("");
   };
 
-  const startEdit = (x: any) => {
+  const startEdit = (x: Dogovor) => {
     setErr(null);
     setEditingId(String(x.id));
-    setDate(String(x.date || "").slice(0, 10));
+    setDate(normalizeYYYYMMDD(x.date));
     setTime(normalizeHHMM(x.time));
+
     const nm = String(x.name || "");
     if (PREDEFINED_NAMES.includes(nm)) {
       setName(nm);
@@ -415,6 +436,7 @@ function Dogovori() {
       setName("");
       setCustomName(nm);
     }
+
     setNote(String(x.note || ""));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -435,7 +457,7 @@ function Dogovori() {
       const payload: any = {
         secret: DOGOVORI_SECRET,
         action,
-        date,
+        date: normalizeYYYYMMDD(date),
         time: normalizeHHMM(time),
         name: finalName,
         note,
@@ -491,6 +513,7 @@ function Dogovori() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useRefreshOnForeground(load);
@@ -553,70 +576,82 @@ function Dogovori() {
         </div>
       </Card>
 
-    <Card title="Popis">
-  {items.length === 0 ? (
-    <div className="small">Nema dogovora.</div>
-  ) : (
-    items.map((x) => {
-      const id = String(x.id);
-      const d = String(x.date || "").slice(0, 10);
-      const t = normalizeHHMM(x.time); // <-- BITNO
-      const nm = String(x.name || "");
-      const nt = String(x.note || "");
+      <Card title="Popis">
+        {items.length === 0 ? (
+          <div className="small">Nema dogovora.</div>
+        ) : (
+          items.map((x) => {
+            const id = String(x.id);
+            const d = normalizeYYYYMMDD(x.date);
+            const t = normalizeHHMM(x.time);
+            const nm = String(x.name || "");
+            const nt = String(x.note || "");
 
-      return (
-        <div
-          key={id}
-          style={{
-            padding: "12px 0",
-            borderTop: "1px solid rgba(255,255,255,0.08)",
-            opacity: busy ? 0.7 : 1,
-          }}
-        >
-          <div>
-            <b>
-              {d} {t}
-            </b>{" "}
-            — {nm}
+            return (
+              <div
+                key={id}
+                style={{
+                  padding: "12px 0",
+                  borderTop: "1px solid rgba(255,255,255,0.08)",
+                  opacity: busy ? 0.7 : 1,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+                  <div>
+                    <b>
+                      {d} {t}
+                    </b>{" "}
+                    — {nm}
+                    {nt && (
+                      <div className="small" style={{ marginTop: 4 }}>
+                        {nt}
+                      </div>
+                    )}
+                  </div>
 
-            {nt && (
-              <div className="small" style={{ marginTop: 4 }}>
-                {nt}
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <button className="btn" onClick={() => startEdit(x)} disabled={busy}>
+                      Uredi
+                    </button>
+                    <button className="btn" onClick={() => del(id)} disabled={busy}>
+                      Obriši
+                    </button>
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
+            );
+          })
+        )}
+      </Card>
+    </section>
+  );
+}
 
-          {/* EDIT / DELETE */}
-          <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-            <button className="btn" onClick={() => startEdit(x)} disabled={busy}>
-              Uredi
-            </button>
+// ===== Helpers: normalizacija datuma i vremena =====
+function normalizeYYYYMMDD(v: any): string {
+  if (!v) return "";
+  const s = String(v).trim();
+  // ISO "2026-02-06T23:00:00.000Z"
+  const mIso = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (mIso) return mIso[1];
+  // već "YYYY-MM-DD"
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  return s.slice(0, 10);
+}
 
-            <button className="btn" onClick={() => del(id)} disabled={busy}>
-              Obriši
-            </button>
-          </div>
-        </div>
-      );
-    })
-  )}
-</Card>
-
-
-// helper: accept ISO time/date strings or "HH:MM" and return "HH:MM"
 function normalizeHHMM(v: any): string {
   if (!v) return "";
   const s = String(v).trim();
 
-  // ISO like 1899-12-30T09:30:00.000Z -> extract
+  // ISO "1899-12-30T09:30:00.000Z" -> 09:30
   const mIso = s.match(/T(\d{2}:\d{2}):\d{2}/);
   if (mIso) return mIso[1];
 
-  // HH:MM or HH:MM:SS
+  // "HH:MM" or "H:MM" or "HH:MM:SS"
   const mHM = s.match(/^(\d{1,2}):(\d{2})/);
   if (mHM) return String(mHM[1]).padStart(2, "0") + ":" + mHM[2];
 
-  // AM/PM e.g. 02:47 AM
+  // "02:47 AM"
   const mAmPm = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
   if (mAmPm) {
     let hh = parseInt(mAmPm[1], 10);
