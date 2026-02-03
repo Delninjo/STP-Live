@@ -2,7 +2,7 @@ import "./globals.css";
 
 export const metadata = {
   title: "STP Live",
-  description: "Sljeme kamera, vrijeme i status žičare."
+  description: "Službeni app STP crew"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
