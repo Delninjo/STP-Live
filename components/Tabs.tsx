@@ -319,26 +319,41 @@ function Profile({ me, onAuth }: { me: Me; onAuth: () => void }) {
           )}
 
           {lb?.leaderboard && (
-            <Card title="Ranking (leaderboard)">
-              {lb.leaderboard.slice(0, 15).map((r: any, idx: number) => (
-                <div key={r.userId} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                    <div style={{ fontWeight: 900 }}>
-                      #{idx + 1} {r.displayName}
-                      {me?.id === r.userId ? " (ti)" : ""}
-                    </div>
-                    <div style={{ fontWeight: 900 }}>{r.pointsTotal} bod</div>
-                  </div>
-                  <div className="small">aktivnosti: {r.activitiesTotal}</div>
-                </div>
-              ))}
-            </Card>
-          )}
-        </>
-      )}
-    </section>
-  );
-}
+  <Card title="Ranking (leaderboard)">
+    {lb.leaderboard.slice(0, 15).map((r: any, idx: number) => (
+      <div
+        key={r.userId}
+        style={{
+          padding: "10px 0",
+          borderTop: "1px solid rgba(255,255,255,0.08)",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+          <div style={{ fontWeight: 900 }}>
+            #{idx + 1} {r.displayName}
+            {me?.id === r.userId ? " (ti)" : ""}
+          </div>
+
+          <div style={{ fontWeight: 900 }}>
+            {r.pointsTotal} bod
+          </div>
+        </div>
+
+        <div className="small">
+          aktivnosti: {r.activitiesTotal}
+        </div>
+
+        <div className="small" style={{ opacity: 0.7 }}>
+          zadnja aktivnost:{" "}
+          {r.lastActivityAt
+            ? new Date(r.lastActivityAt).toLocaleString("hr-HR")
+            : "—"}
+        </div>
+      </div>
+    ))}
+  </Card>
+)}
+
 
 // ===================== AUTH PANEL =====================
 function AuthPanel({ onAuth }: { onAuth: () => void }) {
