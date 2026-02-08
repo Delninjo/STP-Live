@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 // ====== PODESI OVO ======
 const DOGOVORI_SECRET = "STP123";
@@ -31,12 +31,11 @@ export default function Tabs() {
       {tab === "YouTube" && <YouTubeLatest />}
       {tab === "Radno vrijeme" && <WorkHours />}
       {tab === "Utrke" && <Races />}
-
     </>
   );
 }
 
-/* ------------------ UI HELPERS ------------------ */
+/* ===================== UI HELPERS ===================== */
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -73,36 +72,12 @@ function useRefreshOnForeground(fn: () => void) {
   }, [fn]);
 }
 
-function formatUpdatedAtHR(input: any): string {
-  if (!input) return "";
-  const d = new Date(input);
-  if (isNaN(d.getTime())) return String(input);
-
-  const now = new Date();
-  const sameDay =
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate();
-
-  const time = new Intl.DateTimeFormat("hr-HR", { hour: "2-digit", minute: "2-digit" }).format(d);
-
-  if (sameDay) return `danas u ${time}`;
-
-  const date = new Intl.DateTimeFormat("hr-HR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(d);
-
-  return `${date} u ${time}`;
-}
-
-// helper: accept ISO time/date strings or "HH:MM" and return "HH:MM"
+/** helper: accept ISO time/date strings or "HH:MM" and return "HH:MM" */
 function normalizeHHMM(v: any): string {
   if (!v) return "";
   const s = String(v).trim();
 
-  // ISO like 1899-12-30T09:30:00.000Z -> extract HH:MM
+  // ISO like 1899-12-30T09:30:00.000Z
   const mIso = s.match(/T(\d{2}:\d{2}):\d{2}/);
   if (mIso) return mIso[1];
 
@@ -124,7 +99,12 @@ function normalizeHHMM(v: any): string {
   return s;
 }
 
-/* ------------------ CAMERA ------------------ */
+function fmtISODate(d: string) {
+  // očekuje YYYY-MM-DD
+  return d;
+}
+
+/* ===================== CAMERA ===================== */
 
 function Camera() {
   const url = "https://www.livecamcroatia.com/en/camera/sljeme-viewpoint";
@@ -187,7 +167,7 @@ function Camera() {
   );
 }
 
-/* ------------------ WEATHER ------------------ */
+/* ===================== WEATHER ===================== */
 
 function Weather() {
   const [now, setNow] = useState<any>(null);
@@ -217,6 +197,8 @@ function Weather() {
 
   useRefreshOnForeground(load);
 
+  const updatedPretty = now?.updatedAt ? String(now.updatedAt).replace("T", " ").slice(0, 16) : "";
+
   return (
     <section>
       {err && <p style={{ color: "#ff5a7a" }}>{err}</p>}
@@ -227,7 +209,7 @@ function Weather() {
           <Row k="Vjetar" v={`${now.windDir} ${now.windMs} m/s`} />
           <Row k="Stanje" v={`${now.condition}`} />
           <div className="small" style={{ marginTop: 10 }}>
-            Ažurirano: {formatUpdatedAtHR(now.updatedAt)}
+            Ažurirano: {updatedPretty}
           </div>
         </Card>
       )}
@@ -276,7 +258,7 @@ function Weather() {
   );
 }
 
-/* ------------------ YOUTUBE ------------------ */
+/* ===================== YOUTUBE ===================== */
 
 function YouTubeLatest() {
   const [items, setItems] = useState<any[]>([]);
@@ -338,7 +320,7 @@ function YouTubeLatest() {
           ))}
         </div>
 
-        {updatedAt && <div className="small" style={{ marginTop: 10 }}>Ažurirano: {formatUpdatedAtHR(updatedAt)}</div>}
+        {updatedAt && <div className="small" style={{ marginTop: 10 }}>Ažurirano: {updatedAt}</div>}
       </Card>
 
       <a className="btn" href="https://www.youtube.com/@stpmtb" target="_blank" rel="noreferrer">
@@ -348,110 +330,7 @@ function YouTubeLatest() {
   );
 }
 
-/* ------------------ CABLECAR ------------------ */
-
-function weatherIcon(cond: string) {
-  const s = (cond || "").toLowerCase();
-
-  if (s.includes("grml") || s.includes("oluj") || s.includes("thunder")) return "⛈️";
-  if (s.includes("snij") || s.includes("snow")) return "🌨️";
-  if (s.includes("kiš") || s.includes("rain") || s.includes("pljus")) return "🌧️";
-  if (s.includes("magl") || s.includes("fog")) return "🌫️";
-  if (s.includes("obla") || s.includes("cloud")) return "☁️";
-  if (s.includes("sun") || s.includes("vedro") || s.includes("clear")) return "☀️";
-
-  return "⛅";
-}
-
-function WorkHours() {
-  const [hours, setHours] = useState<any>(null);
-  const [now, setNow] = useState<any>(null);
-  const [err, setErr] = useState<string | null>(null);
-
-  const load = async () => {
-    setErr(null);
-    try {
-      const [h, n] = await Promise.all([
-        fetch("/api/cablecar/hours", { cache: "no-store" }).then((r) => r.json()),
-        fetch("/api/weather/now", { cache: "no-store" }).then((r) => r.json()),
-      ]);
-
-      if (h?.error) {
-        setErr(`Ne mogu dohvatiti radno vrijeme. (${h.error})`);
-      } else {
-        setHours(h);
-      }
-
-      setNow(n);
-    } catch {
-      setErr("Ne mogu dohvatiti radno vrijeme.");
-    }
-  };
-
-  useEffect(() => {
-    load();
-    const interval = setInterval(load, 15 * 60 * 1000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useRefreshOnForeground(load);
-
-  const icon = weatherIcon(now?.condition || "");
-
-  return (
-    <section>
-      {err && <p style={{ color: "#ff5a7a" }}>{err}</p>}
-
-      <Card title="Radno vrijeme (sažetak)">
-        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 12 }}>
-          <div style={{ fontSize: 34, lineHeight: 1 }}>{icon}</div>
-          <div>
-            <div style={{ fontWeight: 900, fontSize: 18 }}>Sljeme – danas</div>
-            <div className="small" style={{ opacity: 0.85 }}>
-              Ikona iz DHMZ stanja
-            </div>
-          </div>
-        </div>
-
-        {!hours ? (
-          <div className="small">Učitavam…</div>
-        ) : (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "120px 1fr",
-              rowGap: 10,
-              columnGap: 12,
-              paddingTop: 6,
-            }}
-          >
-            <div className="small" style={{ opacity: 0.85 }}>
-              Danas
-            </div>
-            <div style={{ fontWeight: 900 }}>
-              Otvaramo u {hours.today?.open || "—"} • Radimo do {hours.today?.close || "—"}
-            </div>
-
-            <div className="small" style={{ opacity: 0.85 }}>
-              Sutra
-            </div>
-            <div style={{ fontWeight: 900 }}>
-              Otvaramo u {hours.tomorrow?.open || "—"} • Radimo do {hours.tomorrow?.close || "—"}
-            </div>
-          </div>
-        )}
-
-        <div className="small" style={{ marginTop: 12, opacity: 0.8 }}>
-          Izvor: zicarasljeme.hr
-        </div>
-      </Card>
-    </section>
-  );
-}
-
-
-/* ------------------ DOGOVORI (ADD/EDIT/DELETE) ------------------ */
+/* ===================== DOGOVORI (ADD/EDIT/DELETE) ===================== */
 
 function Dogovori() {
   const [items, setItems] = useState<any[]>([]);
@@ -481,6 +360,13 @@ function Dogovori() {
     }
   };
 
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useRefreshOnForeground(load);
+
   const resetForm = () => {
     setEditingId(null);
     setDate("");
@@ -495,6 +381,7 @@ function Dogovori() {
     setEditingId(String(x.id));
     setDate(String(x.date || "").slice(0, 10));
     setTime(normalizeHHMM(x.time));
+
     const nm = String(x.name || "");
     if (PREDEFINED_NAMES.includes(nm)) {
       setName(nm);
@@ -509,8 +396,8 @@ function Dogovori() {
 
   const save = async () => {
     setErr(null);
-
     const finalName = name === "" ? customName.trim() : name;
+
     if (!date || !time || !finalName) {
       setErr("Upiši datum, vrijeme i ime.");
       return;
@@ -562,6 +449,7 @@ function Dogovori() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ secret: DOGOVORI_SECRET, action: "delete", id }),
       });
+
       const data = await res.json();
       if (!data.ok) {
         setErr(`Ne mogu obrisati. (${data.error || "unknown"})`);
@@ -577,35 +465,21 @@ function Dogovori() {
     }
   };
 
-  useEffect(() => {
-    load();
-  }, []);
-
-  useRefreshOnForeground(load);
-
   return (
     <section>
       <Card title={editingId ? "Uredi dogovor" : "Dogovori"}>
         {err && <div style={{ color: "#ff6b8a", marginBottom: 10 }}>{err}</div>}
 
-        <div className="small" style={{ marginBottom: 6 }}>
-          Datum
-        </div>
+        <div className="small" style={{ marginBottom: 6 }}>Datum</div>
         <input className="inp" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
 
-        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
-          Vrijeme (24h)
-        </div>
+        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>Vrijeme (24h)</div>
         <input className="inp" type="time" step={60} value={time} onChange={(e) => setTime(e.target.value)} />
 
-        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
-          Tko dolazi
-        </div>
+        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>Tko dolazi</div>
         <select className="inp" value={name} onChange={(e) => setName(e.target.value)}>
           {PREDEFINED_NAMES.map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
+            <option key={n} value={n}>{n}</option>
           ))}
           <option value="">Drugo...</option>
         </select>
@@ -619,9 +493,7 @@ function Dogovori() {
           />
         )}
 
-        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
-          Napomena (opcionalno)
-        </div>
+        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>Napomena (opcionalno)</div>
         <input className="inp" placeholder="npr. Tunel" value={note} onChange={(e) => setNote(e.target.value)} />
 
         <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
@@ -658,29 +530,30 @@ function Dogovori() {
                 style={{
                   padding: "12px 0",
                   borderTop: "1px solid rgba(255,255,255,0.08)",
-                  opacity: busy ? 0.75 : 1,
+                  opacity: busy ? 0.7 : 1,
                 }}
               >
-                <div>
-                  <b>
-                    {d} {t}
-                  </b>{" "}
-                  — {nm}
-                  {nt && (
-                    <div className="small" style={{ marginTop: 4 }}>
-                      {nt}
-                    </div>
-                  )}
-                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div>
+                    <b>
+                      {fmtISODate(d)} {t}
+                    </b>{" "}
+                    — {nm}
+                    {nt && (
+                      <div className="small" style={{ marginTop: 4 }}>
+                        {nt}
+                      </div>
+                    )}
+                  </div>
 
-                {/* EDIT / DELETE */}
-                <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-                  <button className="btn" onClick={() => startEdit(x)} disabled={busy}>
-                    Uredi
-                  </button>
-                  <button className="btn" onClick={() => del(id)} disabled={busy}>
-                    Obriši
-                  </button>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <button className="btn" onClick={() => startEdit(x)} disabled={busy}>
+                      Uredi
+                    </button>
+                    <button className="btn" onClick={() => del(id)} disabled={busy}>
+                      Obriši
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -691,15 +564,88 @@ function Dogovori() {
   );
 }
 
+/* ===================== RADNO VRIJEME (DANAS) ===================== */
+/**
+ * Očekuje da /api/cablecar/hours vrati:
+ * { rows: [{ station: string, first: string, lastWorkday?: string, lastWeekend?: string, last: string }] }
+ *
+ * Ako ti backend vraća drugačije, samo mi copy-paste JSON i prilagodim UI.
+ */
+function WorkHours() {
+  const [rows, setRows] = useState<any[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = async () => {
+    setErr(null);
+    try {
+      const data = await fetch("/api/cablecar/hours", { cache: "no-store" }).then((r) => r.json());
+      if (data.error) {
+        setErr(`Ne mogu dohvatiti radno vrijeme. (${data.error})`);
+        return;
+      }
+      setRows(data.rows ?? []);
+    } catch {
+      setErr("Ne mogu dohvatiti radno vrijeme.");
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  useRefreshOnForeground(load);
+
+  return (
+    <section>
+      <Card title="Radno vrijeme (danas)">
+        {err && <div style={{ color: "#ff6b8a" }}>{err}</div>}
+
+        {!err && rows.length === 0 && <div className="small">Nema podataka.</div>}
+
+        <div style={{ display: "grid", gap: 12 }}>
+          {rows.map((r) => (
+            <div
+              key={r.station}
+              style={{
+                borderTop: "1px solid rgba(255,255,255,0.08)",
+                paddingTop: 12,
+              }}
+            >
+              <div style={{ fontWeight: 900, fontSize: 18 }}>{r.station}</div>
+
+              <div className="small" style={{ marginTop: 6, display: "grid", gap: 4 }}>
+                <div>
+                  <b>Prvi polazak:</b> {r.first ?? "—"}
+                </div>
+                <div>
+                  <b>Zadnji polazak:</b> {r.last ?? "—"}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="small" style={{ marginTop: 10 }}>Izvor: zicarasljeme.hr</div>
+      </Card>
+    </section>
+  );
+}
+
+/* ===================== UTRKE ===================== */
+
 function Races() {
   const [items, setItems] = useState<any[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
   const load = async () => {
+    setErr(null);
     try {
       const data = await fetch("/api/races", { cache: "no-store" }).then((r) => r.json());
-      if (data.error) setErr("Ne mogu dohvatiti utrke.");
-      else setItems(data.items ?? []);
+      if (data.error) {
+        setErr("Ne mogu dohvatiti utrke.");
+        return;
+      }
+      setItems(data.items ?? []);
     } catch {
       setErr("Ne mogu dohvatiti utrke.");
     }
@@ -715,7 +661,6 @@ function Races() {
     <section>
       <Card title="MTB utrke">
         {err && <div style={{ color: "#ff6b8a" }}>{err}</div>}
-
         {items.length === 0 && !err && <div className="small">Nema utrka.</div>}
 
         <div style={{ display: "grid", gap: 10 }}>
