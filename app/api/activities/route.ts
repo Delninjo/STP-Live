@@ -64,7 +64,7 @@ export async function GET() {
                   count(*)::int as activities_total,
                   max(ua.created_at) as last_activity_at
                from user_activities ua
-               left join app_users au on au.id::text = ua.user_id
+               left join app_users au on au.id = ua.user_id
                group by ua.user_id, au.display_name
                order by points_total desc, activities_total desc, last_activity_at desc
                limit 50`;
