@@ -349,30 +349,41 @@ function YouTubeLatest() {
 
 /* ------------------ CABLECAR ------------------ */
 
-type CablecarRow = {
-  station: string;
-  first?: string; // all days
-  lastWeekday?: string; // radni dan
-  lastWeekend?: string; // vikend/blagdan
-};
+function weatherIcon(cond: string) {
+  const s = (cond || "").toLowerCase();
 
-function Cablecar() {
-  const [rows, setRows] = useState<CablecarRow[]>([]);
-  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  if (s.includes("grml") || s.includes("oluj") || s.includes("thunder")) return "⛈️";
+  if (s.includes("snij") || s.includes("snow")) return "🌨️";
+  if (s.includes("kiš") || s.includes("rain") || s.includes("pljus")) return "🌧️";
+  if (s.includes("magl") || s.includes("fog")) return "🌫️";
+  if (s.includes("obla") || s.includes("cloud")) return "☁️";
+  if (s.includes("sun") || s.includes("vedro") || s.includes("clear")) return "☀️";
+
+  return "⛅";
+}
+
+function WorkHours() {
+  const [hours, setHours] = useState<any>(null);
+  const [now, setNow] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const load = async () => {
     setErr(null);
     try {
-      const data = await fetch("/api/cablecar/hours", { cache: "no-store" }).then((r) => r.json());
-      if (data.error) {
-        setErr(`Ne mogu dohvatiti podatke o žičari. (${data.error})`);
-        return;
+      const [h, n] = await Promise.all([
+        fetch("/api/cablecar/hours", { cache: "no-store" }).then((r) => r.json()),
+        fetch("/api/weather/now", { cache: "no-store" }).then((r) => r.json()),
+      ]);
+
+      if (h?.error) {
+        setErr(`Ne mogu dohvatiti radno vrijeme. (${h.error})`);
+      } else {
+        setHours(h);
       }
-      setRows(data.rows ?? []);
-      setUpdatedAt(data.updatedAt ?? null);
+
+      setNow(n);
     } catch {
-      setErr("Ne mogu dohvatiti podatke o žičari.");
+      setErr("Ne mogu dohvatiti radno vrijeme.");
     }
   };
 
@@ -385,97 +396,59 @@ function Cablecar() {
 
   useRefreshOnForeground(load);
 
-  const todayLabel = useMemo(() => {
-    const d = new Date();
-    const day = d.getDay(); // 0 ned, 6 sub
-    // (bez praznika) – vikend = sub/ned
-    return day === 0 || day === 6 ? "VIKEND / BLAGDAN" : "RADNI DAN";
-  }, []);
+  const icon = weatherIcon(now?.condition || "");
 
   return (
     <section>
       {err && <p style={{ color: "#ff5a7a" }}>{err}</p>}
 
-      <Card title={`Radno vrijeme (danas) • ${todayLabel}`}>
-        {rows.length === 0 ? (
-          <div className="small">Nema podataka.</div>
+      <Card title="Radno vrijeme (sažetak)">
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 12 }}>
+          <div style={{ fontSize: 34, lineHeight: 1 }}>{icon}</div>
+          <div>
+            <div style={{ fontWeight: 900, fontSize: 18 }}>Sljeme – danas</div>
+            <div className="small" style={{ opacity: 0.85 }}>
+              Ikona iz DHMZ stanja
+            </div>
+          </div>
+        </div>
+
+        {!hours ? (
+          <div className="small">Učitavam…</div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {rows.map((r) => (
-              <div
-                key={r.station}
-                style={{
-                  paddingTop: 12,
-                  borderTop: "1px solid rgba(255,255,255,0.08)",
-                }}
-              >
-                <div style={{ fontWeight: 900, fontSize: 18 }}>{r.station}</div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "120px 1fr",
+              rowGap: 10,
+              columnGap: 12,
+              paddingTop: 6,
+            }}
+          >
+            <div className="small" style={{ opacity: 0.85 }}>
+              Danas
+            </div>
+            <div style={{ fontWeight: 900 }}>
+              Otvaramo u {hours.today?.open || "—"} • Radimo do {hours.today?.close || "—"}
+            </div>
 
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                    gap: 10,
-                    marginTop: 10,
-                  }}
-                >
-                  <div
-                    style={{
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      borderRadius: 14,
-                      padding: 10,
-                      background: "rgba(0,0,0,0.18)",
-                    }}
-                  >
-                    <div className="small">Prvi polazak</div>
-                    <div style={{ fontWeight: 900, fontSize: 18 }}>{r.first ?? "—"}</div>
-                  </div>
-
-                  <div
-                    style={{
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      borderRadius: 14,
-                      padding: 10,
-                      background: "rgba(0,0,0,0.18)",
-                    }}
-                  >
-                    <div className="small">Zadnji (radni dan)</div>
-                    <div style={{ fontWeight: 900, fontSize: 18 }}>{r.lastWeekday ?? "—"}</div>
-                  </div>
-
-                  <div
-                    style={{
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      borderRadius: 14,
-                      padding: 10,
-                      background: "rgba(0,0,0,0.18)",
-                    }}
-                  >
-                    <div className="small">Zadnji (vikend/blagdan)</div>
-                    <div style={{ fontWeight: 900, fontSize: 18 }}>{r.lastWeekend ?? "—"}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
+            <div className="small" style={{ opacity: 0.85 }}>
+              Sutra
+            </div>
+            <div style={{ fontWeight: 900 }}>
+              Otvaramo u {hours.tomorrow?.open || "—"} • Radimo do {hours.tomorrow?.close || "—"}
+            </div>
           </div>
         )}
 
-        <div className="small" style={{ marginTop: 12 }}>
-          Izvor: zicarasljeme.hr{updatedAt ? ` • Ažurirano: ${formatUpdatedAtHR(updatedAt)}` : ""}
+        <div className="small" style={{ marginTop: 12, opacity: 0.8 }}>
+          Izvor: zicarasljeme.hr
         </div>
       </Card>
-
-      <a
-        className="btn"
-        href="https://www.zicarasljeme.hr/planirani-zastoji-zbog-odrzavanja-zicare/"
-        target="_blank"
-        rel="noreferrer"
-      >
-        Planirani zastoji (službeno)
-      </a>
     </section>
   );
 }
+
 
 /* ------------------ DOGOVORI (ADD/EDIT/DELETE) ------------------ */
 
