@@ -211,18 +211,21 @@ function Profile({ me, onAuth }: { me: Me; onAuth: () => void }) {
           {err && <div style={{ color: "#ff6b8a", marginBottom: 10 }}>{err}</div>}
 
           {data?.user && (
-            <Card title="Moj profil">
-              <Row k="Ime" v={String(data.user.displayName)} />
-              <Row k="Email" v={String(data.user.email)} />
-              <Row k="Bodovi (ukupno)" v={String(data.stats?.pointsTotal ?? 0)} />
-              <Row k="Aktivnosti (ukupno)" v={String(data.stats?.activitiesTotal ?? 0)} />
-              <Row
-                k="Badge"
-                v={`${data.stats?.badge?.emoji ?? "🏷️"} ${data.stats?.badge?.label ?? "—"}`}
-              />
-            </Card>
-          )}
+  <Card title="Moj profil">
+    <Row k="Ime" v={String(data.user.displayName)} />
+    <Row k="Email" v={String(data.user.email)} />
+    <Row k="Bodovi (ukupno)" v={String(data.stats?.pointsTotal ?? 0)} />
+    <Row k="Aktivnosti (ukupno)" v={String(data.stats?.activitiesTotal ?? 0)} />
 
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "6px 0" }}>
+      <div className="small" style={{ opacity: 0.85 }}>Badge</div>
+      <div style={{ fontWeight: 900 }}>
+        <span style={{ marginRight: 8 }}>{data.stats?.badge?.emoji ?? "🏷️"}</span>
+        {data.stats?.badge?.label ?? "—"}
+      </div>
+    </div>
+  </Card>
+)}
           <Card title="Dodaj aktivnost">
             <div className="small" style={{ marginBottom: 6 }}>
               Kategorija
