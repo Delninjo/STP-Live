@@ -321,7 +321,131 @@ function YouTubeLatest() {
     </section>
   );
 }
+function AuthPanel({ onAuth }: { onAuth: () => void }) {
+  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [user, setUser] = useState<any>(null);
+  const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [password, setPassword] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
+  const loadMe = async () => {
+    const r = await fetch("/api/auth/me", { cache: "no-store" });
+    const j = await r.json();
+    setUser(j.user ?? null);
+  };
+
+  useEffect(() => {
+    loadMe();
+  }, []);
+
+  const submit = async () => {
+    setErr(null);
+    setBusy(true);
+    try {
+      const url = mode === "signup" ? "/api/auth/signup" : "/api/auth/login";
+      const payload: any = { email, password };
+      if (mode === "signup") payload.displayName = displayName;
+
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const j = await r.json();
+      if (!j.ok) {
+        setErr(j.error || "error");
+        return;
+      }
+
+      await loadMe();
+      onAuth();
+    } catch {
+      setErr("network");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const logout = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      await loadMe();
+      onAuth();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card title="Prijava">
+      {user ? (
+        <>
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>
+            Ulogiran: {user.displayName} ({user.email})
+          </div>
+          <button className="btn" onClick={logout} disabled={busy}>
+            Odjava
+          </button>
+        </>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+            <button
+              className={`btn ${mode === "login" ? "btnPrimary" : ""}`}
+              onClick={() => setMode("login")}
+              disabled={busy}
+            >
+              Login
+            </button>
+            <button
+              className={`btn ${mode === "signup" ? "btnPrimary" : ""}`}
+              onClick={() => setMode("signup")}
+              disabled={busy}
+            >
+              Registracija
+            </button>
+          </div>
+
+          {err && <div style={{ color: "#ff6b8a", marginBottom: 10 }}>Greška: {err}</div>}
+
+          <div className="small" style={{ marginBottom: 6 }}>
+            Email
+          </div>
+          <input className="inp" value={email} onChange={(e) => setEmail(e.target.value)} />
+
+          {mode === "signup" && (
+            <>
+              <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
+                Ime (display)
+              </div>
+              <input className="inp" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+            </>
+          )}
+
+          <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
+            Lozinka
+          </div>
+          <input className="inp" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+
+          <div style={{ marginTop: 12 }}>
+            <button className="btn btnPrimary" onClick={submit} disabled={busy}>
+              {mode === "signup" ? "Registriraj se" : "Ulogiraj se"}
+            </button>
+          </div>
+
+          <div className="small" style={{ marginTop: 10, opacity: 0.85 }}>
+            (Self-signup je uključen: svatko može napraviti račun.)
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
 // ===================== DOGOVORI (ADD/EDIT/DELETE) =====================
 function Dogovori() {
   const [items, setItems] = useState<any[]>([]);
