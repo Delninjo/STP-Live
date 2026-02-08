@@ -1,4 +1,4 @@
-import { getIronSession, type IronSessionOptions } from "iron-session";
+import { getIronSession, IronSessionOptions } from "iron-session";
 import { cookies } from "next/headers";
 
 export type SessionUser = {
@@ -11,9 +11,9 @@ export type SessionData = {
   user?: SessionUser;
 };
 
-const sessionOptions: IronSessionOptions = {
+export const sessionOptions: IronSessionOptions = {
   cookieName: "stp_live_session",
-  password: process.env.SESSION_PASSWORD!, // min 32 chars
+  password: process.env.SESSION_PASSWORD as string,
   cookieOptions: {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -23,6 +23,6 @@ const sessionOptions: IronSessionOptions = {
 };
 
 export async function getSession() {
-  return getIronSession<SessionData>(await cookies(), sessionOptions);
+  // iron-session radi s Next cookies() u App Routeru
+  return getIronSession<SessionData>(cookies(), sessionOptions);
 }
-
