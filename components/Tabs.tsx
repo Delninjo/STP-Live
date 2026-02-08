@@ -691,10 +691,73 @@ function CablecarToday() {
 }
 // ===================== UTRKE =====================
 function Races() {
+  const [items, setItems] = React.useState<any[]>([]);
+  const [err, setErr] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(true);
+
+  const load = async () => {
+    setErr(null);
+    try {
+      const res = await fetch("/api/races", { cache: "no-store" });
+      const data = await res.json();
+
+      if (data.error) {
+        setErr(data.error);
+        return;
+      }
+
+      // podrška i za items i za races (ovisno o API verziji)
+      setItems(data.items ?? data.races ?? []);
+    } catch {
+      setErr("Ne mogu dohvatiti utrke.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    load();
+  }, []);
+
   return (
     <section>
       <Card title="Utrke (MTB)">
-        <div className="small">TODO: dohvat s mtb.hr, hbs.hr i UCI (DHI u HR).</div>
+        {loading && <div className="small">Učitavam…</div>}
+        {err && <div style={{ color: "#ff6b8a" }}>{err}</div>}
+
+        {!loading && !err && items.length === 0 && (
+          <div className="small">Nema pronađenih utrka.</div>
+        )}
+
+        <div style={{ display: "grid", gap: 10 }}>
+          {items.map((r, i) => (
+            <a
+              key={i}
+              href={r.url}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                border: "1px solid rgba(255,255,255,0.10)",
+                borderRadius: 16,
+                padding: 12,
+                background: "rgba(0,0,0,0.20)",
+                color: "var(--text)",
+                textDecoration: "none",
+              }}
+            >
+              <div style={{ fontWeight: 900 }}>{r.title}</div>
+
+              <div className="small" style={{ marginTop: 4 }}>
+                {r.date} • {r.location}
+              </div>
+
+              <div className="small" style={{ marginTop: 4, opacity: 0.7 }}>
+                {r.source.toUpperCase()}
+                {r.discipline ? ` • ${r.discipline}` : ""}
+              </div>
+            </a>
+          ))}
+        </div>
       </Card>
     </section>
   );
