@@ -3,6 +3,8 @@ import React, { useEffect, useMemo, useState } from "react";
 
 // ====== PODESI OVO ======
 const DOGOVORI_SECRET = "STP123";
+// Predefinirana imena (možeš mijenjati kad god) — ostavljam da se ne slomi dogovori endpoint dok ga ne prebacimo na user-based
+const PREDEFINED_NAMES = ["Denis", "Ciba", "Szabo", "Magić", "Kerrdog"];
 
 type Tab = "Vrijeme" | "Kamera" | "Dogovori" | "YouTube" | "Žičara" | "Utrke";
 
@@ -17,7 +19,7 @@ export default function Tabs() {
       .then((j) => setMe(j.user ?? null))
       .catch(() => setMe(null));
 
-    // 2) upiši posjet (samo ako je ulogiran; endpoint vraća 401 ako nije)
+    // 2) upiši posjet (endpoint će vratiti 401 ako nije ulogiran — ignoriramo)
     fetch("/api/visits", { method: "POST" }).catch(() => {});
   }, []);
 
@@ -241,10 +243,7 @@ function Weather() {
 
           <Card title="Sljedećih 7 dana">
             {fc.daily.map((d: any) => (
-              <div
-                key={d.date}
-                style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}
-              >
+              <div key={d.date} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <div style={{ fontWeight: 900 }}>{d.date}</div>
                   <div style={{ fontWeight: 900 }}>
@@ -481,6 +480,8 @@ function Dogovori() {
 
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
+  const [name, setName] = useState(PREDEFINED_NAMES[0] ?? "");
+  const [customName, setCustomName] = useState("");
   const [note, setNote] = useState("");
 
   const load = async () => {
@@ -502,6 +503,8 @@ function Dogovori() {
     setEditingId(null);
     setDate("");
     setTime("");
+    setName(PREDEFINED_NAMES[0] ?? "");
+    setCustomName("");
     setNote("");
   };
 
@@ -510,6 +513,16 @@ function Dogovori() {
     setEditingId(String(x.id));
     setDate(String(x.date || "").slice(0, 10));
     setTime(normalizeHHMM(x.time));
+
+    const nm = String(x.name || "");
+    if (PREDEFINED_NAMES.includes(nm)) {
+      setName(nm);
+      setCustomName("");
+    } else {
+      setName("");
+      setCustomName(nm);
+    }
+
     setNote(String(x.note || ""));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -517,8 +530,9 @@ function Dogovori() {
   const save = async () => {
     setErr(null);
 
-    if (!date || !time) {
-      setErr("Upiši datum i vrijeme.");
+    const finalName = name === "" ? customName.trim() : name;
+    if (!date || !time || !finalName) {
+      setErr("Upiši datum, vrijeme i ime.");
       return;
     }
 
@@ -531,6 +545,7 @@ function Dogovori() {
         action,
         date,
         time: normalizeHHMM(time),
+        name: finalName,
         note,
       };
       if (editingId) payload.id = editingId;
@@ -584,7 +599,6 @@ function Dogovori() {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useRefreshOnForeground(load);
@@ -609,6 +623,27 @@ function Dogovori() {
           Vrijeme (24h)
         </div>
         <input className="inp" type="time" step={60} value={time} onChange={(e) => setTime(e.target.value)} />
+
+        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
+          Tko dolazi
+        </div>
+        <select className="inp" value={name} onChange={(e) => setName(e.target.value)}>
+          {PREDEFINED_NAMES.map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+          <option value="">Drugo...</option>
+        </select>
+
+        {name === "" && (
+          <input
+            className="inp"
+            placeholder="Upiši ime"
+            value={customName}
+            onChange={(e) => setCustomName(e.target.value)}
+          />
+        )}
 
         <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
           Napomena (opcionalno)
@@ -640,6 +675,7 @@ function Dogovori() {
             const id = String(x.id);
             const d = String(x.date || "").slice(0, 10);
             const t = normalizeHHMM(x.time);
+            const nm = String(x.name || "");
             const nt = String(x.note || "");
 
             return (
@@ -654,7 +690,8 @@ function Dogovori() {
                 <div>
                   <b>
                     {d} {t}
-                  </b>
+                  </b>{" "}
+                  — {nm}
                 </div>
 
                 {nt && (
@@ -680,7 +717,7 @@ function Dogovori() {
   );
 }
 
-// ===================== ŽIČARA (SAMO DANAS, STATIČNO) =====================
+// ===================== ŽIČARA =====================
 function CablecarToday() {
   const SCHEDULE = [
     { station: "Donja postaja", first: "08:00", lastWeekday: "16:30", lastWeekend: "17:30" },
@@ -776,15 +813,284 @@ function CablecarToday() {
   );
 }
 
-// ===================== UTRKE =====================
+// ===================== UTRKE (UI) =====================
 function Races() {
-  // Ostavio sam Races dio isti kao kod tebe (pretpostavka: radi ti i sad)
-  // Ako želiš, mogu ti naknadno ubaciti i ovaj dio kompletno u isti file,
-  // ali pošto ti je bio jako dug, bolje je da ostane tvoj postojeći Races kod.
+  const [items, setItems] = React.useState<any[]>([]);
+  const [err, setErr] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [showPast, setShowPast] = React.useState(false);
+
+  const toISODate = (v: any): string | null => {
+    if (!v) return null;
+    const s = String(v).trim();
+
+    const m1 = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m1) return `${m1[1]}-${m1[2]}-${m1[3]}`;
+
+    const m2 = s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})/);
+    if (m2) {
+      const dd = String(m2[1]).padStart(2, "0");
+      const mm = String(m2[2]).padStart(2, "0");
+      const yy = m2[3];
+      return `${yy}-${mm}-${dd}`;
+    }
+
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+
+    return null;
+  };
+
+  const monthKey = (iso: string) => iso.slice(0, 7);
+  const monthLabelHR = (ym: string) => {
+    const [y, m] = ym.split("-").map((x) => parseInt(x, 10));
+    const months = [
+      "Siječanj",
+      "Veljača",
+      "Ožujak",
+      "Travanj",
+      "Svibanj",
+      "Lipanj",
+      "Srpanj",
+      "Kolovoz",
+      "Rujan",
+      "Listopad",
+      "Studeni",
+      "Prosinac",
+    ];
+    return `${months[(m || 1) - 1]} ${y}`;
+  };
+
+  const isPast = (iso: string) => {
+    const today = new Date();
+    const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const d = new Date(iso + "T00:00:00");
+    return d.getTime() < t.getTime();
+  };
+
+  const load = async () => {
+    setErr(null);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/races", { cache: "no-store" });
+      const data = await res.json();
+
+      if (data?.error) {
+        setErr(String(data.error));
+        return;
+      }
+
+      const raw = (data.items ?? data.races ?? []) as any[];
+
+      const normalized = raw
+        .map((r) => {
+          const iso = toISODate(r.date);
+          return {
+            ...r,
+            _iso: iso,
+            title: String(r.title ?? "").trim(),
+            location: String(r.location ?? "").trim(),
+            url: String(r.url ?? "").trim(),
+            source: String(r.source ?? "").trim(),
+            discipline: r.discipline ? String(r.discipline).trim() : "",
+          };
+        })
+        .filter((r) => r.title && r.url);
+
+      normalized.sort((a, b) => {
+        const da = a._iso ?? "9999-12-31";
+        const db = b._iso ?? "9999-12-31";
+        if (da !== db) return da.localeCompare(db);
+        return a.title.localeCompare(b.title);
+      });
+
+      setItems(normalized);
+    } catch {
+      setErr("Ne mogu dohvatiti utrke.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    load();
+  }, []);
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  const visible = items.filter((r) => {
+    if (!r._iso) return true;
+    if (showPast) return true;
+    return !isPast(r._iso);
+  });
+
+  const nextRace = visible.find((r) => r._iso && r._iso >= todayIso) ?? visible[0] ?? null;
+
+  const groups = visible.reduce((acc: Record<string, any[]>, r) => {
+    const k = r._iso ? monthKey(r._iso) : "unknown";
+    acc[k] = acc[k] || [];
+    acc[k].push(r);
+    return acc;
+  }, {});
+
+  const orderedKeys = Object.keys(groups).sort((a, b) => {
+    if (a === "unknown") return 1;
+    if (b === "unknown") return -1;
+    return a.localeCompare(b);
+  });
+
+  const SourcePill = ({ s }: { s: string }) => {
+    const label = s?.toLowerCase().includes("uci")
+      ? "UCI (DHI HR)"
+      : s?.toLowerCase().includes("hbs")
+      ? "HBS"
+      : s?.toLowerCase().includes("mtb")
+      ? "mtb.hr"
+      : s || "izvor";
+
+    return (
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "2px 10px",
+          borderRadius: 999,
+          border: "1px solid rgba(255,255,255,0.16)",
+          background: "rgba(0,0,0,0.18)",
+          fontSize: 12,
+          opacity: 0.9,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {label}
+      </span>
+    );
+  };
+
   return (
     <section>
       <Card title="Utrke (MTB)">
-        <div className="small">Races komponenta je ostala tvoja postojeća.</div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+          <button className="btn" onClick={load} disabled={loading}>
+            {loading ? "Učitavam…" : "Osvježi"}
+          </button>
+
+          <label className="small" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={showPast}
+              onChange={(e) => setShowPast(e.target.checked)}
+              style={{ transform: "scale(1.05)" }}
+            />
+            Prikaži prošle utrke
+          </label>
+
+          <div className="small" style={{ opacity: 0.75 }}>
+            Izvori: mtb.hr + hbs.hr (HR) + UCI (samo DHI u HR)
+          </div>
+        </div>
+
+        {err && <div style={{ color: "#ff6b8a", marginBottom: 10 }}>{err}</div>}
+
+        {!err && !loading && visible.length === 0 && <div className="small">Nema pronađenih utrka.</div>}
+
+        {nextRace && (
+          <div
+            style={{
+              border: "1px solid rgba(255,255,255,0.14)",
+              borderRadius: 18,
+              padding: 12,
+              background: "rgba(0,0,0,0.22)",
+              marginBottom: 12,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+              <div style={{ fontWeight: 900 }}>Sljedeća utrka</div>
+              <span
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 999,
+                  background: "rgba(255,255,255,0.10)",
+                  border: "1px solid rgba(255,255,255,0.18)",
+                  fontSize: 12,
+                  fontWeight: 900,
+                }}
+              >
+                {nextRace._iso ?? String(nextRace.date ?? "").slice(0, 10)}
+              </span>
+            </div>
+
+            <a
+              href={nextRace.url}
+              target="_blank"
+              rel="noreferrer"
+              style={{ display: "block", marginTop: 6, color: "var(--text)", textDecoration: "none" }}
+            >
+              <div style={{ fontWeight: 900, fontSize: 16 }}>{nextRace.title}</div>
+              <div className="small" style={{ marginTop: 4, opacity: 0.9 }}>
+                {nextRace.location}
+              </div>
+              <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <SourcePill s={nextRace.source} />
+                {nextRace.discipline && <SourcePill s={nextRace.discipline} />}
+              </div>
+            </a>
+          </div>
+        )}
+
+        {orderedKeys.map((k) => (
+          <div key={k} style={{ marginTop: 14 }}>
+            <div style={{ fontWeight: 900, marginBottom: 8, opacity: 0.95 }}>
+              {k === "unknown" ? "Bez datuma" : monthLabelHR(k)}
+            </div>
+
+            <div style={{ display: "grid", gap: 10 }}>
+              {groups[k].map((r: any, i: number) => {
+                const dateLabel = r._iso ?? String(r.date ?? "").trim();
+                const past = r._iso ? isPast(r._iso) : false;
+
+                return (
+                  <a
+                    key={r.url + i}
+                    href={r.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      borderRadius: 16,
+                      padding: 12,
+                      background: "rgba(0,0,0,0.20)",
+                      color: "var(--text)",
+                      textDecoration: "none",
+                      opacity: !showPast && past ? 0.55 : 1,
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <div style={{ fontWeight: 900 }}>{r.title}</div>
+                      {dateLabel && (
+                        <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.9, whiteSpace: "nowrap" }}>
+                          {dateLabel}
+                        </div>
+                      )}
+                    </div>
+
+                    {r.location && (
+                      <div className="small" style={{ marginTop: 4, opacity: 0.9 }}>
+                        {r.location}
+                      </div>
+                    )}
+
+                    <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <SourcePill s={r.source} />
+                      {r.discipline && <SourcePill s={r.discipline} />}
+                    </div>
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </Card>
     </section>
   );
