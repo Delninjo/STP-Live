@@ -13,7 +13,7 @@ const CATEGORY_POINTS: Record<string, number> = {
   training: 2,
   race: 2,
   ride_emtb: 1,
-  ride_cablecar: 0,
+  ride_cablecar:1,
 };
 
 function isValidCategory(c: string) {
