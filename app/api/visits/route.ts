@@ -4,6 +4,9 @@ import { sql } from "@/lib/db";
 
 export const runtime = "nodejs";
 
+/**
+ * Zapiši "dolazak" (svaki posjet appu)
+ */
 export async function POST(request: Request) {
   const session = await getSession();
   const user = session.user;
@@ -17,7 +20,7 @@ export async function POST(request: Request) {
 
     await sql`
       insert into user_visits (user_id, user_agent)
-      values (${user.id}::uuid, ${userAgent})
+      values (${user.id}, ${userAgent})
     `;
 
     return NextResponse.json({ ok: true });
@@ -29,40 +32,56 @@ export async function POST(request: Request) {
   }
 }
 
-// GET: zadnji dolasci po useru + zadnjih 50 dolazaka ukupno
+/**
+ * Dohvati:
+ * - moje zadnje posjete (recentMine)
+ * - leaderboard posjeta (tko je kad zadnji put došao + broj posjeta)
+ */
 export async function GET() {
+  const session = await getSession();
+  const me = session.user;
+
+  if (!me) {
+    return NextResponse.json({ ok: false, error: "not_logged_in" }, { status: 401 });
+  }
+
   try {
-    const perUser = await sql`
+    const recentMine = await sql`
       select
-        v.user_id,
-        u.display_name,
-        max(v.created_at) as last_visit_at,
-        count(*)::int as visits_total
-      from user_visits v
-      left join app_users u on u.id = v.user_id
-      group by v.user_id, u.display_name
-      order by last_visit_at desc
-      limit 50
+        created_at,
+        user_agent
+      from user_visits
+      where user_id = ${me.id}
+      order by created_at desc
+      limit 20
     `;
 
-    const recent = await sql`
+    const leaderboard = await sql`
       select
-        v.id, v.user_id, u.display_name, v.created_at, v.user_agent
-      from user_visits v
-      left join app_users u on u.id = v.user_id
-      order by v.created_at desc
+        uv.user_id,
+        au.display_name,
+        count(*)::int as visits_total,
+        max(uv.created_at) as last_seen_at
+      from user_visits uv
+      left join app_users au on au.id = uv.user_id
+      group by uv.user_id, au.display_name
+      order by last_seen_at desc nulls last, visits_total desc
       limit 50
     `;
 
     return NextResponse.json({
       ok: true,
-      perUser: perUser.map((r: any) => ({
+      mine: {
+        userId: me.id,
+        displayName: me.displayName,
+      },
+      recentMine,
+      leaderboard: leaderboard.map((r: any) => ({
         userId: String(r.user_id),
         displayName: r.display_name == null ? "Unknown" : String(r.display_name),
-        lastVisitAt: r.last_visit_at,
         visitsTotal: Number(r.visits_total),
+        lastSeenAt: r.last_seen_at,
       })),
-      recent,
       updatedAt: new Date().toISOString(),
     });
   } catch (e: any) {
