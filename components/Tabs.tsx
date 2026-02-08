@@ -3,24 +3,31 @@ import React, { useEffect, useMemo, useState } from "react";
 
 // ====== PODESI OVO ======
 const DOGOVORI_SECRET = "STP123";
-// Predefinirana imena (možeš mijenjati kad god) — ostavljam da se ne slomi dogovori endpoint dok ga ne prebacimo na user-based
-const PREDEFINED_NAMES = ["Denis", "Ciba", "Szabo", "Magić", "Kerrdog"];
 
-type Tab = "Vrijeme" | "Kamera" | "Dogovori" | "YouTube" | "Žičara" | "Utrke";
+type Tab = "Profil" | "Vrijeme" | "Kamera" | "Dogovori" | "YouTube" | "Žičara" | "Utrke";
+
+type Me = { id: string; email: string; displayName: string } | null;
 
 export default function Tabs() {
-  const [tab, setTab] = useState<Tab>("Vrijeme");
-  const [me, setMe] = useState<any>(null);
+  const [tab, setTab] = useState<Tab>("Profil");
+  const [me, setMe] = useState<Me>(null);
+
+  const refreshMe = async () => {
+    try {
+      const r = await fetch("/api/auth/me", { cache: "no-store" });
+      const j = await r.json();
+      setMe(j.user ?? null);
+    } catch {
+      setMe(null);
+    }
+  };
 
   useEffect(() => {
-    // 1) dohvati usera za "Bok, Ime"
-    fetch("/api/auth/me", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => setMe(j.user ?? null))
-      .catch(() => setMe(null));
+    refreshMe();
 
-    // 2) upiši posjet (endpoint će vratiti 401 ako nije ulogiran — ignoriramo)
+    // upiši posjet (ako nije ulogiran -> 401, ignoriramo)
     fetch("/api/visits", { method: "POST" }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -30,7 +37,7 @@ export default function Tabs() {
         style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}
       >
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {(["Vrijeme", "Kamera", "Dogovori", "YouTube", "Žičara", "Utrke"] as Tab[]).map((t) => (
+          {(["Profil", "Vrijeme", "Kamera", "Dogovori", "YouTube", "Žičara", "Utrke"] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -48,9 +55,10 @@ export default function Tabs() {
         )}
       </div>
 
+      {tab === "Profil" && <Profile me={me} onAuth={refreshMe} />}
       {tab === "Vrijeme" && <Weather />}
       {tab === "Kamera" && <Camera />}
-      {tab === "Dogovori" && <Dogovori />}
+      {tab === "Dogovori" && <Dogovori me={me} onAuth={refreshMe} />}
       {tab === "YouTube" && <YouTubeLatest />}
       {tab === "Žičara" && <CablecarToday />}
       {tab === "Utrke" && <Races />}
@@ -93,15 +101,578 @@ function useRefreshOnForeground(fn: () => void) {
   }, [fn]);
 }
 
+// ===================== PROFILE (B) =====================
+function Profile({ me, onAuth }: { me: Me; onAuth: () => void }) {
+  const [data, setData] = useState<any>(null);
+  const [lb, setLb] = useState<any>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const [category, setCategory] = useState<string>("ride_climb");
+  const [note, setNote] = useState("");
+  const [occurredOn, setOccurredOn] = useState<string>(""); // yyyy-mm-dd
+  const [busy, setBusy] = useState(false);
+
+  const CATEGORY_LABELS: Record<string, string> = {
+    ride_climb: "Vožnja uspon (3 boda)",
+    work: "Radna akcija (2 boda)",
+    training: "Trening (2 boda)",
+    race: "Utrka (2 boda)",
+    ride_emtb: "Vožnja e-MTB (1 bod)",
+    ride_cablecar: "Vožnja žičara (0 bodova)",
+  };
+
+  const load = async () => {
+    setErr(null);
+
+    if (!me) {
+      setData(null);
+      setLb(null);
+      return;
+    }
+
+    try {
+      const [p, l] = await Promise.all([
+        fetch("/api/profile", { cache: "no-store" }).then((r) => r.json()),
+        fetch("/api/activities", { cache: "no-store" }).then((r) => r.json()),
+      ]);
+
+      if (!p.ok) {
+        setErr(p.error || "profile_error");
+        setData(null);
+      } else {
+        setData(p);
+      }
+
+      if (l.ok) setLb(l);
+    } catch {
+      setErr("Ne mogu dohvatiti profil.");
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me?.id]);
+
+  useRefreshOnForeground(load);
+
+  const addActivity = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const payload: any = { category, note: note.trim() };
+      if (occurredOn) payload.occurredOn = occurredOn;
+
+      const r = await fetch("/api/activities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const j = await r.json();
+      if (!j.ok) {
+        setErr(j.error || "add_failed");
+        return;
+      }
+
+      setNote("");
+      setOccurredOn("");
+      await load();
+    } catch {
+      setErr("Ne mogu upisati aktivnost.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section>
+      {!me ? (
+        <Card title="Profil">
+          <div className="small" style={{ marginBottom: 10 }}>
+            Za profil / bodove / ranking moraš se ulogirati.
+          </div>
+          <AuthPanel onAuth={onAuth} />
+        </Card>
+      ) : (
+        <>
+          <AuthPanel onAuth={() => { onAuth(); load(); }} />
+
+          {err && <div style={{ color: "#ff6b8a", marginBottom: 10 }}>{err}</div>}
+
+          {data?.user && (
+            <Card title="Moj profil">
+              <Row k="Ime" v={String(data.user.displayName)} />
+              <Row k="Email" v={String(data.user.email)} />
+              <Row k="Bodovi (ukupno)" v={String(data.stats?.pointsTotal ?? 0)} />
+              <Row k="Aktivnosti (ukupno)" v={String(data.stats?.activitiesTotal ?? 0)} />
+              <Row
+                k="Badge"
+                v={`${data.stats?.badge?.emoji ?? "🏷️"} ${data.stats?.badge?.label ?? "—"}`}
+              />
+            </Card>
+          )}
+
+          <Card title="Dodaj aktivnost">
+            <div className="small" style={{ marginBottom: 6 }}>
+              Kategorija
+            </div>
+            <select className="inp" value={category} onChange={(e) => setCategory(e.target.value)}>
+              {Object.keys(CATEGORY_LABELS).map((k) => (
+                <option key={k} value={k}>
+                  {CATEGORY_LABELS[k]}
+                </option>
+              ))}
+            </select>
+
+            <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
+              Datum (opcionalno)
+            </div>
+            <input className="inp" type="date" value={occurredOn} onChange={(e) => setOccurredOn(e.target.value)} />
+
+            <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
+              Napomena (opcionalno)
+            </div>
+            <input className="inp" value={note} onChange={(e) => setNote(e.target.value)} placeholder="npr. Sljeme, 2h" />
+
+            <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button className="btn btnPrimary" onClick={addActivity} disabled={busy}>
+                Upis
+              </button>
+              <button className="btn" onClick={load} disabled={busy}>
+                Osvježi
+              </button>
+            </div>
+          </Card>
+
+          {data?.byCategory && (
+            <Card title="Po kategorijama">
+              {data.byCategory.length === 0 ? (
+                <div className="small">Nema aktivnosti.</div>
+              ) : (
+                data.byCategory.map((x: any) => (
+                  <div key={x.category} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <div style={{ fontWeight: 900 }}>{x.category}</div>
+                      <div style={{ fontWeight: 900 }}>{x.points} bod</div>
+                    </div>
+                    <div className="small">broj: {x.count}</div>
+                  </div>
+                ))
+              )}
+            </Card>
+          )}
+
+          {data?.visits && (
+            <Card title="Zadnji dolasci (posjeti)">
+              {data.visits.length === 0 ? (
+                <div className="small">Nema posjeta.</div>
+              ) : (
+                data.visits.slice(0, 15).map((v: any, i: number) => (
+                  <div key={i} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div style={{ fontWeight: 900 }}>{String(v.createdAt)}</div>
+                    <div className="small" style={{ opacity: 0.8 }}>
+                      {String(v.userAgent || "").slice(0, 120)}
+                    </div>
+                  </div>
+                ))
+              )}
+            </Card>
+          )}
+
+          {data?.activities && (
+            <Card title="Zadnje aktivnosti">
+              {data.activities.length === 0 ? (
+                <div className="small">Nema aktivnosti.</div>
+              ) : (
+                data.activities.slice(0, 15).map((a: any) => (
+                  <div key={a.id} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <div style={{ fontWeight: 900 }}>{a.category}</div>
+                      <div style={{ fontWeight: 900 }}>{a.points} bod</div>
+                    </div>
+                    <div className="small">
+                      datum: {String(a.occurredOn || "").slice(0, 10)} • upis: {String(a.createdAt)}
+                    </div>
+                    {a.note && <div className="small" style={{ opacity: 0.9, marginTop: 4 }}>{a.note}</div>}
+                  </div>
+                ))
+              )}
+            </Card>
+          )}
+
+          {lb?.leaderboard && (
+            <Card title="Ranking (leaderboard)">
+              {lb.leaderboard.slice(0, 15).map((r: any, idx: number) => (
+                <div key={r.userId} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                    <div style={{ fontWeight: 900 }}>
+                      #{idx + 1} {r.displayName}
+                      {me?.id === r.userId ? " (ti)" : ""}
+                    </div>
+                    <div style={{ fontWeight: 900 }}>{r.pointsTotal} bod</div>
+                  </div>
+                  <div className="small">aktivnosti: {r.activitiesTotal}</div>
+                </div>
+              ))}
+            </Card>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+// ===================== AUTH PANEL =====================
+function AuthPanel({ onAuth }: { onAuth: () => void }) {
+  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [user, setUser] = useState<any>(null);
+  const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [password, setPassword] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const loadMe = async () => {
+    const r = await fetch("/api/auth/me", { cache: "no-store" });
+    const j = await r.json();
+    setUser(j.user ?? null);
+  };
+
+  useEffect(() => {
+    loadMe();
+  }, []);
+
+  const submit = async () => {
+    setErr(null);
+    setBusy(true);
+    try {
+      const url = mode === "signup" ? "/api/auth/signup" : "/api/auth/login";
+      const payload: any = { email, password };
+      if (mode === "signup") payload.displayName = displayName;
+
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const j = await r.json();
+      if (!j.ok) {
+        setErr(j.error || "error");
+        return;
+      }
+
+      await loadMe();
+      onAuth();
+    } catch {
+      setErr("network");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const logout = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      await loadMe();
+      onAuth();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card title="Prijava">
+      {user ? (
+        <>
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>
+            Ulogiran: {user.displayName} ({user.email})
+          </div>
+          <button className="btn" onClick={logout} disabled={busy}>
+            Odjava
+          </button>
+        </>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+            <button
+              className={`btn ${mode === "login" ? "btnPrimary" : ""}`}
+              onClick={() => setMode("login")}
+              disabled={busy}
+            >
+              Login
+            </button>
+            <button
+              className={`btn ${mode === "signup" ? "btnPrimary" : ""}`}
+              onClick={() => setMode("signup")}
+              disabled={busy}
+            >
+              Registracija
+            </button>
+          </div>
+
+          {err && <div style={{ color: "#ff6b8a", marginBottom: 10 }}>Greška: {err}</div>}
+
+          <div className="small" style={{ marginBottom: 6 }}>
+            Email
+          </div>
+          <input className="inp" value={email} onChange={(e) => setEmail(e.target.value)} />
+
+          {mode === "signup" && (
+            <>
+              <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
+                Ime (display)
+              </div>
+              <input className="inp" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+            </>
+          )}
+
+          <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
+            Lozinka
+          </div>
+          <input className="inp" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+
+          <div style={{ marginTop: 12 }}>
+            <button className="btn btnPrimary" onClick={submit} disabled={busy}>
+              {mode === "signup" ? "Registriraj se" : "Ulogiraj se"}
+            </button>
+          </div>
+
+          <div className="small" style={{ marginTop: 10, opacity: 0.85 }}>
+            (Self-signup je uključen: svatko može napraviti račun.)
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+// ===================== DOGOVORI (bez predefiniranih imena) =====================
+function Dogovori({ me, onAuth }: { me: Me; onAuth: () => void }) {
+  const [items, setItems] = useState<any[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [note, setNote] = useState("");
+
+  const load = async () => {
+    setErr(null);
+    try {
+      const res = await fetch("/api/dogovori", { cache: "no-store" });
+      const data = await res.json();
+      if (data.error) {
+        setErr(`Ne mogu dohvatiti dogovore. (${data.error})`);
+        return;
+      }
+      setItems(data.items ?? []);
+    } catch {
+      setErr("Ne mogu dohvatiti dogovore.");
+    }
+  };
+
+  const resetForm = () => {
+    setEditingId(null);
+    setDate("");
+    setTime("");
+    setNote("");
+  };
+
+  const startEdit = (x: any) => {
+    setErr(null);
+    setEditingId(String(x.id));
+    setDate(String(x.date || "").slice(0, 10));
+    setTime(normalizeHHMM(x.time));
+    setNote(String(x.note || ""));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const save = async () => {
+    setErr(null);
+
+    if (!me) {
+      setErr("Moraš biti ulogiran.");
+      return;
+    }
+    if (!date || !time) {
+      setErr("Upiši datum i vrijeme.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const action = editingId ? "update" : "add";
+
+      const payload: any = {
+        secret: DOGOVORI_SECRET,
+        action,
+        date,
+        time: normalizeHHMM(time),
+        name: me.displayName, // automatski ulogirani user
+        note,
+      };
+      if (editingId) payload.id = editingId;
+
+      const res = await fetch("/api/dogovori", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!data.ok) {
+        setErr(`Ne mogu sačuvati dogovor. (${data.error || "unknown"})`);
+        return;
+      }
+
+      resetForm();
+      await load();
+    } catch {
+      setErr("Ne mogu sačuvati dogovor. (network)");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const del = async (id: string) => {
+    if (!confirm("Obrisati ovaj dogovor?")) return;
+
+    setErr(null);
+    setBusy(true);
+    try {
+      const res = await fetch("/api/dogovori", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret: DOGOVORI_SECRET, action: "delete", id }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setErr(`Ne mogu obrisati. (${data.error || "unknown"})`);
+        return;
+      }
+
+      if (editingId === id) resetForm();
+      await load();
+    } catch {
+      setErr("Ne mogu obrisati. (network)");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  useRefreshOnForeground(load);
+
+  return (
+    <section>
+      <AuthPanel onAuth={() => { onAuth(); load(); }} />
+
+      {!me && (
+        <Card title="Dogovori">
+          <div className="small">Za upis dogovora moraš biti ulogiran.</div>
+        </Card>
+      )}
+
+      <Card title={editingId ? "Uredi dogovor" : "Dogovori"}>
+        {err && <div style={{ color: "#ff6b8a", marginBottom: 10 }}>{err}</div>}
+
+        <div className="small" style={{ marginBottom: 6 }}>
+          Datum
+        </div>
+        <input className="inp" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+
+        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
+          Vrijeme (24h)
+        </div>
+        <input className="inp" type="time" step={60} value={time} onChange={(e) => setTime(e.target.value)} />
+
+        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
+          Napomena (opcionalno)
+        </div>
+        <input className="inp" placeholder="npr. Tunel" value={note} onChange={(e) => setNote(e.target.value)} />
+
+        <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+          <button className="btn btnPrimary" onClick={save} disabled={busy || !me}>
+            {editingId ? "Spremi izmjene" : "Upiši dogovor"}
+          </button>
+
+          <button className="btn" onClick={load} disabled={busy}>
+            Osvježi
+          </button>
+
+          {editingId && (
+            <button className="btn" onClick={resetForm} disabled={busy}>
+              Odustani
+            </button>
+          )}
+        </div>
+      </Card>
+
+      <Card title="Popis">
+        {items.length === 0 ? (
+          <div className="small">Nema dogovora.</div>
+        ) : (
+          items.map((x) => {
+            const id = String(x.id);
+            const d = String(x.date || "").slice(0, 10);
+            const t = normalizeHHMM(x.time);
+            const nm = String(x.name || "");
+            const nt = String(x.note || "");
+
+            return (
+              <div
+                key={id}
+                style={{
+                  padding: "12px 0",
+                  borderTop: "1px solid rgba(255,255,255,0.08)",
+                  opacity: busy ? 0.7 : 1,
+                }}
+              >
+                <div>
+                  <b>
+                    {d} {t}
+                  </b>{" "}
+                  — {nm}
+                </div>
+
+                {nt && (
+                  <div className="small" style={{ marginTop: 4 }}>
+                    {nt}
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                  <button className="btn" onClick={() => startEdit(x)} disabled={busy}>
+                    Uredi
+                  </button>
+                  <button className="btn" onClick={() => del(id)} disabled={busy}>
+                    Obriši
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </Card>
+    </section>
+  );
+}
+
 // ===================== CAMERA =====================
 function Camera() {
   const url = "https://www.livecamcroatia.com/en/camera/sljeme-viewpoint";
   const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      setBlocked(true);
-    }, 4000);
+    const t = setTimeout(() => setBlocked(true), 4000);
     return () => clearTimeout(t);
   }, []);
 
@@ -151,7 +722,6 @@ function Camera() {
           </>
         )}
       </Card>
-
       <div className="small">Izvor: LiveCamCroatia</div>
     </section>
   );
@@ -343,380 +913,6 @@ function YouTubeLatest() {
   );
 }
 
-// ===================== AUTH PANEL =====================
-function AuthPanel({ onAuth }: { onAuth: () => void }) {
-  const [mode, setMode] = useState<"login" | "signup">("login");
-  const [user, setUser] = useState<any>(null);
-  const [email, setEmail] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [password, setPassword] = useState("");
-  const [err, setErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const loadMe = async () => {
-    const r = await fetch("/api/auth/me", { cache: "no-store" });
-    const j = await r.json();
-    setUser(j.user ?? null);
-  };
-
-  useEffect(() => {
-    loadMe();
-  }, []);
-
-  const submit = async () => {
-    setErr(null);
-    setBusy(true);
-    try {
-      const url = mode === "signup" ? "/api/auth/signup" : "/api/auth/login";
-      const payload: any = { email, password };
-      if (mode === "signup") payload.displayName = displayName;
-
-      const r = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const j = await r.json();
-      if (!j.ok) {
-        setErr(j.error || "error");
-        return;
-      }
-
-      await loadMe();
-      onAuth();
-    } catch {
-      setErr("network");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const logout = async () => {
-    setBusy(true);
-    setErr(null);
-    try {
-      await fetch("/api/auth/logout", { method: "POST" });
-      await loadMe();
-      onAuth();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Card title="Prijava">
-      {user ? (
-        <>
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>
-            Ulogiran: {user.displayName} ({user.email})
-          </div>
-          <button className="btn" onClick={logout} disabled={busy}>
-            Odjava
-          </button>
-        </>
-      ) : (
-        <>
-          <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-            <button
-              className={`btn ${mode === "login" ? "btnPrimary" : ""}`}
-              onClick={() => setMode("login")}
-              disabled={busy}
-            >
-              Login
-            </button>
-            <button
-              className={`btn ${mode === "signup" ? "btnPrimary" : ""}`}
-              onClick={() => setMode("signup")}
-              disabled={busy}
-            >
-              Registracija
-            </button>
-          </div>
-
-          {err && <div style={{ color: "#ff6b8a", marginBottom: 10 }}>Greška: {err}</div>}
-
-          <div className="small" style={{ marginBottom: 6 }}>
-            Email
-          </div>
-          <input className="inp" value={email} onChange={(e) => setEmail(e.target.value)} />
-
-          {mode === "signup" && (
-            <>
-              <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
-                Ime (display)
-              </div>
-              <input className="inp" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-            </>
-          )}
-
-          <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
-            Lozinka
-          </div>
-          <input className="inp" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-
-          <div style={{ marginTop: 12 }}>
-            <button className="btn btnPrimary" onClick={submit} disabled={busy}>
-              {mode === "signup" ? "Registriraj se" : "Ulogiraj se"}
-            </button>
-          </div>
-
-          <div className="small" style={{ marginTop: 10, opacity: 0.85 }}>
-            (Self-signup je uključen: svatko može napraviti račun.)
-          </div>
-        </>
-      )}
-    </Card>
-  );
-}
-
-// ===================== DOGOVORI (ADD/EDIT/DELETE) =====================
-function Dogovori() {
-  const [items, setItems] = useState<any[]>([]);
-  const [err, setErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const [editingId, setEditingId] = useState<string | null>(null);
-
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
-  const [name, setName] = useState(PREDEFINED_NAMES[0] ?? "");
-  const [customName, setCustomName] = useState("");
-  const [note, setNote] = useState("");
-
-  const load = async () => {
-    setErr(null);
-    try {
-      const res = await fetch("/api/dogovori", { cache: "no-store" });
-      const data = await res.json();
-      if (data.error) {
-        setErr(`Ne mogu dohvatiti dogovore. (${data.error})`);
-        return;
-      }
-      setItems(data.items ?? []);
-    } catch {
-      setErr("Ne mogu dohvatiti dogovore.");
-    }
-  };
-
-  const resetForm = () => {
-    setEditingId(null);
-    setDate("");
-    setTime("");
-    setName(PREDEFINED_NAMES[0] ?? "");
-    setCustomName("");
-    setNote("");
-  };
-
-  const startEdit = (x: any) => {
-    setErr(null);
-    setEditingId(String(x.id));
-    setDate(String(x.date || "").slice(0, 10));
-    setTime(normalizeHHMM(x.time));
-
-    const nm = String(x.name || "");
-    if (PREDEFINED_NAMES.includes(nm)) {
-      setName(nm);
-      setCustomName("");
-    } else {
-      setName("");
-      setCustomName(nm);
-    }
-
-    setNote(String(x.note || ""));
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const save = async () => {
-    setErr(null);
-
-    const finalName = name === "" ? customName.trim() : name;
-    if (!date || !time || !finalName) {
-      setErr("Upiši datum, vrijeme i ime.");
-      return;
-    }
-
-    setBusy(true);
-    try {
-      const action = editingId ? "update" : "add";
-
-      const payload: any = {
-        secret: DOGOVORI_SECRET,
-        action,
-        date,
-        time: normalizeHHMM(time),
-        name: finalName,
-        note,
-      };
-      if (editingId) payload.id = editingId;
-
-      const res = await fetch("/api/dogovori", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (!data.ok) {
-        setErr(`Ne mogu sačuvati dogovor. (${data.error || "unknown"})`);
-        return;
-      }
-
-      resetForm();
-      await load();
-    } catch {
-      setErr("Ne mogu sačuvati dogovor. (network)");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const del = async (id: string) => {
-    if (!confirm("Obrisati ovaj dogovor?")) return;
-
-    setErr(null);
-    setBusy(true);
-    try {
-      const res = await fetch("/api/dogovori", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ secret: DOGOVORI_SECRET, action: "delete", id }),
-      });
-      const data = await res.json();
-      if (!data.ok) {
-        setErr(`Ne mogu obrisati. (${data.error || "unknown"})`);
-        return;
-      }
-
-      if (editingId === id) resetForm();
-      await load();
-    } catch {
-      setErr("Ne mogu obrisati. (network)");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  useRefreshOnForeground(load);
-
-  return (
-    <section>
-      <AuthPanel
-        onAuth={() => {
-          load();
-        }}
-      />
-
-      <Card title={editingId ? "Uredi dogovor" : "Dogovori"}>
-        {err && <div style={{ color: "#ff6b8a", marginBottom: 10 }}>{err}</div>}
-
-        <div className="small" style={{ marginBottom: 6 }}>
-          Datum
-        </div>
-        <input className="inp" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-
-        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
-          Vrijeme (24h)
-        </div>
-        <input className="inp" type="time" step={60} value={time} onChange={(e) => setTime(e.target.value)} />
-
-        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
-          Tko dolazi
-        </div>
-        <select className="inp" value={name} onChange={(e) => setName(e.target.value)}>
-          {PREDEFINED_NAMES.map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-          <option value="">Drugo...</option>
-        </select>
-
-        {name === "" && (
-          <input
-            className="inp"
-            placeholder="Upiši ime"
-            value={customName}
-            onChange={(e) => setCustomName(e.target.value)}
-          />
-        )}
-
-        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
-          Napomena (opcionalno)
-        </div>
-        <input className="inp" placeholder="npr. Tunel" value={note} onChange={(e) => setNote(e.target.value)} />
-
-        <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
-          <button className="btn btnPrimary" onClick={save} disabled={busy}>
-            {editingId ? "Spremi izmjene" : "Upiši dogovor"}
-          </button>
-
-          <button className="btn" onClick={load} disabled={busy}>
-            Osvježi
-          </button>
-
-          {editingId && (
-            <button className="btn" onClick={resetForm} disabled={busy}>
-              Odustani
-            </button>
-          )}
-        </div>
-      </Card>
-
-      <Card title="Popis">
-        {items.length === 0 ? (
-          <div className="small">Nema dogovora.</div>
-        ) : (
-          items.map((x) => {
-            const id = String(x.id);
-            const d = String(x.date || "").slice(0, 10);
-            const t = normalizeHHMM(x.time);
-            const nm = String(x.name || "");
-            const nt = String(x.note || "");
-
-            return (
-              <div
-                key={id}
-                style={{
-                  padding: "12px 0",
-                  borderTop: "1px solid rgba(255,255,255,0.08)",
-                  opacity: busy ? 0.7 : 1,
-                }}
-              >
-                <div>
-                  <b>
-                    {d} {t}
-                  </b>{" "}
-                  — {nm}
-                </div>
-
-                {nt && (
-                  <div className="small" style={{ marginTop: 4 }}>
-                    {nt}
-                  </div>
-                )}
-
-                <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-                  <button className="btn" onClick={() => startEdit(x)} disabled={busy}>
-                    Uredi
-                  </button>
-                  <button className="btn" onClick={() => del(id)} disabled={busy}>
-                    Obriši
-                  </button>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </Card>
-    </section>
-  );
-}
-
 // ===================== ŽIČARA =====================
 function CablecarToday() {
   const SCHEDULE = [
@@ -756,7 +952,6 @@ function CablecarToday() {
   }, [SCHEDULE, isWeekend]);
 
   const tomorrowFirst = useMemo(() => "08:00", []);
-
   const tomorrowLast = useMemo(() => {
     const lasts = SCHEDULE.map((s) => (tomorrowIsWeekend ? s.lastWeekend : s.lastWeekday));
     return lasts.sort().slice(-1)[0] || "";
@@ -791,14 +986,8 @@ function CablecarToday() {
             return (
               <div key={s.station} style={{ padding: "12px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
                 <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 6 }}>{s.station}</div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
-                  <div className="small">
-                    Prvi polazak: <b>{s.first}</b>
-                  </div>
-                  <div className="small">
-                    Zadnji polazak: <b>{last}</b>
-                  </div>
+                <div className="small">
+                  Prvi polazak: <b>{s.first}</b> • Zadnji polazak: <b>{last}</b>
                 </div>
               </div>
             );
@@ -813,7 +1002,7 @@ function CablecarToday() {
   );
 }
 
-// ===================== UTRKE (UI) =====================
+// ===================== UTRKE (tvoja postojeća UI logika) =====================
 function Races() {
   const [items, setItems] = React.useState<any[]>([]);
   const [err, setErr] = React.useState<string | null>(null);
@@ -845,18 +1034,8 @@ function Races() {
   const monthLabelHR = (ym: string) => {
     const [y, m] = ym.split("-").map((x) => parseInt(x, 10));
     const months = [
-      "Siječanj",
-      "Veljača",
-      "Ožujak",
-      "Travanj",
-      "Svibanj",
-      "Lipanj",
-      "Srpanj",
-      "Kolovoz",
-      "Rujan",
-      "Listopad",
-      "Studeni",
-      "Prosinac",
+      "Siječanj","Veljača","Ožujak","Travanj","Svibanj","Lipanj",
+      "Srpanj","Kolovoz","Rujan","Listopad","Studeni","Prosinac",
     ];
     return `${months[(m || 1) - 1]} ${y}`;
   };
@@ -1106,16 +1285,6 @@ function normalizeHHMM(v: any): string {
 
   const mHM = s.match(/^(\d{1,2}):(\d{2})/);
   if (mHM) return String(mHM[1]).padStart(2, "0") + ":" + mHM[2];
-
-  const mAmPm = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (mAmPm) {
-    let hh = parseInt(mAmPm[1], 10);
-    const mm = mAmPm[2];
-    const ap = mAmPm[3].toUpperCase();
-    if (ap === "PM" && hh < 12) hh += 12;
-    if (ap === "AM" && hh === 12) hh = 0;
-    return String(hh).padStart(2, "0") + ":" + mm;
-  }
 
   return s;
 }
