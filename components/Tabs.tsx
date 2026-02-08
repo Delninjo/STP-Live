@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 // ====== PODESI OVO ======
 const DOGOVORI_SECRET = "STP123";
+// Predefinirana imena (možeš mijenjati kad god)
 const PREDEFINED_NAMES = ["Denis", "Ciba", "Szabo", "Magić", "Kerrdog"];
 
-type Tab = "Vrijeme" | "Kamera" | "Dogovori" | "YouTube" | "Radno vrijeme" | "Utrke";
+type Tab = "Vrijeme" | "Kamera" | "Dogovori" | "YouTube" | "Žičara";
 
 export default function Tabs() {
   const [tab, setTab] = useState<Tab>("Vrijeme");
@@ -14,7 +15,7 @@ export default function Tabs() {
   return (
     <>
       <div className="tabs">
-        {(["Vrijeme", "Kamera", "Dogovori", "YouTube", "Radno vrijeme", "Utrke"] as Tab[]).map((t) => (
+        {(["Vrijeme", "Kamera", "Dogovori", "YouTube", "Žičara"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -29,13 +30,10 @@ export default function Tabs() {
       {tab === "Kamera" && <Camera />}
       {tab === "Dogovori" && <Dogovori />}
       {tab === "YouTube" && <YouTubeLatest />}
-      {tab === "Radno vrijeme" && <WorkHours />}
-      {tab === "Utrke" && <Races />}
+      {tab === "Žičara" && <CablecarToday />}
     </>
   );
 }
-
-/* ===================== UI HELPERS ===================== */
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -72,46 +70,16 @@ function useRefreshOnForeground(fn: () => void) {
   }, [fn]);
 }
 
-/** helper: accept ISO time/date strings or "HH:MM" and return "HH:MM" */
-function normalizeHHMM(v: any): string {
-  if (!v) return "";
-  const s = String(v).trim();
-
-  // ISO like 1899-12-30T09:30:00.000Z
-  const mIso = s.match(/T(\d{2}:\d{2}):\d{2}/);
-  if (mIso) return mIso[1];
-
-  // HH:MM or HH:MM:SS
-  const mHM = s.match(/^(\d{1,2}):(\d{2})/);
-  if (mHM) return String(mHM[1]).padStart(2, "0") + ":" + mHM[2];
-
-  // AM/PM e.g. 02:47 AM
-  const mAmPm = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (mAmPm) {
-    let hh = parseInt(mAmPm[1], 10);
-    const mm = mAmPm[2];
-    const ap = mAmPm[3].toUpperCase();
-    if (ap === "PM" && hh < 12) hh += 12;
-    if (ap === "AM" && hh === 12) hh = 0;
-    return String(hh).padStart(2, "0") + ":" + mm;
-  }
-
-  return s;
-}
-
-function fmtISODate(d: string) {
-  // očekuje YYYY-MM-DD
-  return d;
-}
-
-/* ===================== CAMERA ===================== */
-
+// ===================== CAMERA =====================
 function Camera() {
   const url = "https://www.livecamcroatia.com/en/camera/sljeme-viewpoint";
   const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
-    const t = setTimeout(() => setBlocked(true), 4000);
+    const t = setTimeout(() => {
+      // ako nije učitalo u 4s, UX: prikaži fallback
+      setBlocked(true);
+    }, 4000);
     return () => clearTimeout(t);
   }, []);
 
@@ -167,8 +135,7 @@ function Camera() {
   );
 }
 
-/* ===================== WEATHER ===================== */
-
+// ===================== WEATHER =====================
 function Weather() {
   const [now, setNow] = useState<any>(null);
   const [fc, setFc] = useState<any>(null);
@@ -190,14 +157,27 @@ function Weather() {
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 10 * 60 * 1000);
+    const interval = setInterval(load, 10 * 60 * 1000); // 10 min
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useRefreshOnForeground(load);
 
-  const updatedPretty = now?.updatedAt ? String(now.updatedAt).replace("T", " ").slice(0, 16) : "";
+  const updatedLocal = useMemo(() => {
+    if (!now?.updatedAt) return null;
+    const d = new Date(now.updatedAt);
+    if (isNaN(d.getTime())) return String(now.updatedAt);
+    return d.toLocaleString("hr-HR", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }, [now?.updatedAt]);
+
+  const icon = useMemo(() => weatherIcon(now?.condition), [now?.condition]);
 
   return (
     <section>
@@ -207,10 +187,12 @@ function Weather() {
         <Card title="Na vrhu Sljemena (DHMZ)">
           <Row k="Temperatura" v={`${now.tempC} °C`} />
           <Row k="Vjetar" v={`${now.windDir} ${now.windMs} m/s`} />
-          <Row k="Stanje" v={`${now.condition}`} />
-          <div className="small" style={{ marginTop: 10 }}>
-            Ažurirano: {updatedPretty}
-          </div>
+          <Row k="Stanje" v={`${icon} ${String(now.condition ?? "")}`} />
+          {updatedLocal && (
+            <div className="small" style={{ marginTop: 10 }}>
+              Ažurirano: {updatedLocal}
+            </div>
+          )}
         </Card>
       )}
 
@@ -246,7 +228,9 @@ function Weather() {
                     {d.minC}° / {d.maxC}°
                   </div>
                 </div>
-                <div className="small" style={{ marginTop: 4 }}>vjetar max {d.windMaxMs} m/s</div>
+                <div className="small" style={{ marginTop: 4 }}>
+                  vjetar max {d.windMaxMs} m/s
+                </div>
               </div>
             ))}
           </Card>
@@ -258,8 +242,7 @@ function Weather() {
   );
 }
 
-/* ===================== YOUTUBE ===================== */
-
+// ===================== YOUTUBE =====================
 function YouTubeLatest() {
   const [items, setItems] = useState<any[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -282,7 +265,7 @@ function YouTubeLatest() {
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 30 * 60 * 1000);
+    const interval = setInterval(load, 30 * 60 * 1000); // 30 min
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -314,13 +297,21 @@ function YouTubeLatest() {
               {v.thumbnail && <img src={v.thumbnail} alt={v.title} style={{ width: "100%", display: "block" }} />}
               <div style={{ padding: 10 }}>
                 <div style={{ fontWeight: 900, lineHeight: 1.2 }}>{v.title}</div>
-                {v.published && <div className="small" style={{ marginTop: 6 }}>{String(v.published).slice(0, 10)}</div>}
+                {v.published && (
+                  <div className="small" style={{ marginTop: 6 }}>
+                    {String(v.published).slice(0, 10)}
+                  </div>
+                )}
               </div>
             </a>
           ))}
         </div>
 
-        {updatedAt && <div className="small" style={{ marginTop: 10 }}>Ažurirano: {updatedAt}</div>}
+        {updatedAt && (
+          <div className="small" style={{ marginTop: 10 }}>
+            Ažurirano: {updatedAt}
+          </div>
+        )}
       </Card>
 
       <a className="btn" href="https://www.youtube.com/@stpmtb" target="_blank" rel="noreferrer">
@@ -330,8 +321,7 @@ function YouTubeLatest() {
   );
 }
 
-/* ===================== DOGOVORI (ADD/EDIT/DELETE) ===================== */
-
+// ===================== DOGOVORI (ADD/EDIT/DELETE) =====================
 function Dogovori() {
   const [items, setItems] = useState<any[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -443,7 +433,6 @@ function Dogovori() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ secret: DOGOVORI_SECRET, action: "delete", id }),
       });
-
       const data = await res.json();
       if (!data.ok) {
         setErr(`Ne mogu obrisati. (${data.error || "unknown"})`);
@@ -461,7 +450,6 @@ function Dogovori() {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useRefreshOnForeground(load);
@@ -544,27 +532,26 @@ function Dogovori() {
                   opacity: busy ? 0.7 : 1,
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                  <div>
-                    <b>
-                      {d} {t}
-                    </b>{" "}
-                    — {nm}
-                    {nt && (
-                      <div className="small" style={{ marginTop: 4 }}>
-                        {nt}
-                      </div>
-                    )}
-                  </div>
+                <div>
+                  <b>
+                    {d} {t}
+                  </b>{" "}
+                  — {nm}
+                </div>
 
-                  <div style={{ display: "flex", gap: 10 }}>
-                    <button className="btn" onClick={() => startEdit(x)} disabled={busy}>
-                      Uredi
-                    </button>
-                    <button className="btn" onClick={() => del(id)} disabled={busy}>
-                      Obriši
-                    </button>
+                {nt && (
+                  <div className="small" style={{ marginTop: 4 }}>
+                    {nt}
                   </div>
+                )}
+
+                <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                  <button className="btn" onClick={() => startEdit(x)} disabled={busy}>
+                    Uredi
+                  </button>
+                  <button className="btn" onClick={() => del(id)} disabled={busy}>
+                    Obriši
+                  </button>
                 </div>
               </div>
             );
@@ -575,130 +562,187 @@ function Dogovori() {
   );
 }
 
+// ===================== ŽIČARA (SAMO DANAS, STATIČNO) =====================
+function CablecarToday() {
+  // raspored prema tablici koju si poslao (bez parkinga)
+  const SCHEDULE = [
+    {
+      station: "Donja postaja",
+      first: "08:00",
+      lastWeekday: "16:30",
+      lastWeekend: "17:30",
+    },
+    {
+      station: "Međupostaja Brestovac (prema vrhu)",
+      first: "08:00",
+      lastWeekday: "16:30",
+      lastWeekend: "17:30",
+    },
+    {
+      station: "Međupostaja Brestovac (prema dolje)",
+      first: "08:00",
+      lastWeekday: "17:00",
+      lastWeekend: "18:00",
+    },
+    {
+      station: "Gornja postaja",
+      first: "08:00",
+      lastWeekday: "17:00",
+      lastWeekend: "18:00",
+    },
+  ] as const;
 
-/* ===================== RADNO VRIJEME (DANAS) ===================== */
-/**
- * Očekuje da /api/cablecar/hours vrati:
- * { rows: [{ station: string, first: string, lastWorkday?: string, lastWeekend?: string, last: string }] }
- *
- * Ako ti backend vraća drugačije, samo mi copy-paste JSON i prilagodim UI.
- */
-function WorkHours() {
-  const [rows, setRows] = useState<any[]>([]);
-  const [err, setErr] = useState<string | null>(null);
-
-  const load = async () => {
-    setErr(null);
-    try {
-      const data = await fetch("/api/cablecar/hours", { cache: "no-store" }).then((r) => r.json());
-      if (data.error) {
-        setErr(`Ne mogu dohvatiti radno vrijeme. (${data.error})`);
-        return;
-      }
-      setRows(data.rows ?? []);
-    } catch {
-      setErr("Ne mogu dohvatiti radno vrijeme.");
-    }
-  };
-
-  useEffect(() => {
-    load();
+  const isWeekend = useMemo(() => {
+    const d = new Date();
+    const day = d.getDay(); // 0 ned, 6 sub
+    return day === 0 || day === 6;
   }, []);
 
-  useRefreshOnForeground(load);
+  const todayLabel = useMemo(() => {
+    const d = new Date();
+    return d.toLocaleDateString("hr-HR", { year: "numeric", month: "2-digit", day: "2-digit" });
+  }, []);
+
+  const tomorrowLabel = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toLocaleDateString("hr-HR", { year: "numeric", month: "2-digit", day: "2-digit" });
+  }, []);
+
+  const tomorrowIsWeekend = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    const day = d.getDay();
+    return day === 0 || day === 6;
+  }, []);
+
+  // “danas radimo do …” — uzmi najkasniji zadnji polazak (gornja postaja je realno najbitnija, ali uzet ćemo max)
+  const todayLast = useMemo(() => {
+    const lasts = SCHEDULE.map((s) => (isWeekend ? s.lastWeekend : s.lastWeekday));
+    return lasts.sort().slice(-1)[0] || "";
+  }, [SCHEDULE, isWeekend]);
+
+  const tomorrowFirst = useMemo(() => {
+    // po tablici uvijek 08:00
+    return "08:00";
+  }, []);
+
+  const tomorrowLast = useMemo(() => {
+    const lasts = SCHEDULE.map((s) => (tomorrowIsWeekend ? s.lastWeekend : s.lastWeekday));
+    return lasts.sort().slice(-1)[0] || "";
+  }, [SCHEDULE, tomorrowIsWeekend]);
 
   return (
     <section>
       <Card title="Radno vrijeme (danas)">
-        {err && <div style={{ color: "#ff6b8a" }}>{err}</div>}
-
-        {!err && rows.length === 0 && <div className="small">Nema podataka.</div>}
-
-        <div style={{ display: "grid", gap: 12 }}>
-          {rows.map((r) => (
-            <div
-              key={r.station}
-              style={{
-                borderTop: "1px solid rgba(255,255,255,0.08)",
-                paddingTop: 12,
-              }}
-            >
-              <div style={{ fontWeight: 900, fontSize: 18 }}>{r.station}</div>
-
-              <div className="small" style={{ marginTop: 6, display: "grid", gap: 4 }}>
-                <div>
-                  <b>Prvi polazak:</b> {r.first ?? "—"}
-                </div>
-                <div>
-                  <b>Zadnji polazak:</b> {r.last ?? "—"}
-                </div>
-              </div>
-            </div>
-          ))}
+        <div className="small" style={{ marginBottom: 10 }}>
+          {todayLabel} • {isWeekend ? "vikend / blagdan" : "radni dan"}
         </div>
 
-        <div className="small" style={{ marginTop: 10 }}>Izvor: zicarasljeme.hr</div>
+        <div
+          style={{
+            border: "1px solid rgba(255,255,255,0.10)",
+            borderRadius: 16,
+            padding: 12,
+            background: "rgba(0,0,0,0.20)",
+          }}
+        >
+          <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 6 }}>Sažetak</div>
+          <div className="small" style={{ lineHeight: 1.5 }}>
+            Danas radimo do <b>{todayLast}</b>.
+            <br />
+            Sutra ({tomorrowLabel}) otvaramo u <b>{tomorrowFirst}</b> i radimo do <b>{tomorrowLast}</b>.
+          </div>
+        </div>
+
+        <div style={{ marginTop: 12 }}>
+          {SCHEDULE.map((s) => {
+            const last = isWeekend ? s.lastWeekend : s.lastWeekday;
+            return (
+              <div
+                key={s.station}
+                style={{
+                  padding: "12px 0",
+                  borderTop: "1px solid rgba(255,255,255,0.08)",
+                }}
+              >
+                <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 6 }}>{s.station}</div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
+                  <div className="small">
+                    Prvi polazak: <b>{s.first}</b>
+                  </div>
+                  <div className="small">
+                    Zadnji polazak: <b>{last}</b>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="small" style={{ marginTop: 10 }}>
+          Izvor: ZET (radno vrijeme žičare)
+        </div>
       </Card>
     </section>
   );
 }
 
-/* ===================== UTRKE ===================== */
+// ===================== HELPERS =====================
 
-function Races() {
-  const [items, setItems] = useState<any[]>([]);
-  const [err, setErr] = useState<string | null>(null);
+// helper: accept ISO time/date strings or "HH:MM" and return "HH:MM"
+function normalizeHHMM(v: any): string {
+  if (!v) return "";
+  const s = String(v).trim();
 
-  const load = async () => {
-    setErr(null);
-    try {
-      const data = await fetch("/api/races", { cache: "no-store" }).then((r) => r.json());
-      if (data.error) {
-        setErr("Ne mogu dohvatiti utrke.");
-        return;
-      }
-      setItems(data.items ?? []);
-    } catch {
-      setErr("Ne mogu dohvatiti utrke.");
-    }
-  };
+  // ISO like 1899-12-30T09:30:00.000Z -> extract
+  const mIso = s.match(/T(\d{2}:\d{2}):\d{2}/);
+  if (mIso) return mIso[1];
 
-  useEffect(() => {
-    load();
-  }, []);
+  // HH:MM or HH:MM:SS
+  const mHM = s.match(/^(\d{1,2}):(\d{2})/);
+  if (mHM) return String(mHM[1]).padStart(2, "0") + ":" + mHM[2];
 
-  useRefreshOnForeground(load);
+  // AM/PM e.g. 02:47 AM
+  const mAmPm = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (mAmPm) {
+    let hh = parseInt(mAmPm[1], 10);
+    const mm = mAmPm[2];
+    const ap = mAmPm[3].toUpperCase();
+    if (ap === "PM" && hh < 12) hh += 12;
+    if (ap === "AM" && hh === 12) hh = 0;
+    return String(hh).padStart(2, "0") + ":" + mm;
+  }
 
-  return (
-    <section>
-      <Card title="MTB utrke">
-        {err && <div style={{ color: "#ff6b8a" }}>{err}</div>}
-        {items.length === 0 && !err && <div className="small">Nema utrka.</div>}
+  return s;
+}
 
-        <div style={{ display: "grid", gap: 10 }}>
-          {items.map((x) => (
-            <a
-              key={x.url}
-              href={x.url}
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                padding: 12,
-                borderRadius: 16,
-                border: "1px solid rgba(255,255,255,0.10)",
-                background: "rgba(0,0,0,0.20)",
-                color: "var(--text)",
-                textDecoration: "none",
-              }}
-            >
-              <div style={{ fontWeight: 900 }}>{x.title}</div>
-              <div className="small" style={{ marginTop: 4, opacity: 0.7 }}>
-                {x.source}
-              </div>
-            </a>
-          ))}
-        </div>
-      </Card>
-    </section>
-  );
+// pokušaj pogoditi ikonu iz WMO koda ili teksta
+function weatherIcon(condition: any): string {
+  if (condition == null) return "🌤️";
+  const s = String(condition).toLowerCase().trim();
+
+  // WMO weather code (Open-Meteo standard): 0..99
+  const n = Number(s);
+  if (!Number.isNaN(n)) {
+    if (n === 0) return "☀️";
+    if (n === 1 || n === 2) return "🌤️";
+    if (n === 3) return "☁️";
+    if (n === 45 || n === 48) return "🌫️";
+    if ([51, 53, 55, 56, 57].includes(n)) return "🌦️";
+    if ([61, 63, 65, 66, 67, 80, 81, 82].includes(n)) return "🌧️";
+    if ([71, 73, 75, 77, 85, 86].includes(n)) return "❄️";
+    if ([95, 96, 99].includes(n)) return "⛈️";
+    return "🌤️";
+  }
+
+  // fallback po tekstu
+  if (s.includes("thunder") || s.includes("grml") || s.includes("oluj")) return "⛈️";
+  if (s.includes("snow") || s.includes("snij")) return "❄️";
+  if (s.includes("rain") || s.includes("kiš") || s.includes("pljus")) return "🌧️";
+  if (s.includes("fog") || s.includes("magl")) return "🌫️";
+  if (s.includes("cloud") || s.includes("obl")) return "☁️";
+  if (s.includes("sun") || s.includes("ved")) return "☀️";
+  return "🌤️";
 }
