@@ -12,10 +12,10 @@
   "next": "^14.2.0",
   "react": "^18.3.0",
   "react-dom": "^18.3.0",
-  "@neondatabase/serverless": "^0.10.0",
-  "iron-session": "^8.0.2",
   "bcryptjs": "^2.4.3",
-  "nodemailer": "^6.9.13"
+  "iron-session": "^8.0.3"
+  "@neondatabase/serverless": "^0.10.0",
+  "nodemailer": "^6.9.13"  
 },
   "devDependencies": {
   "@types/node": "^20.11.0",
