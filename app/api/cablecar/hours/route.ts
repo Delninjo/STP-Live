@@ -1,25 +1,38 @@
+// app/api/cablecar/hours/route.ts
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
 const URL = "https://www.zicarasljeme.hr/radno-vrijeme/";
 
-// grubo čišćenje HTML-a u plain text
-function stripTags(s: string) {
-  return s
-    .replace(/<br\s*\/?>/gi, " • ")
-    .replace(/<\/p>/gi, "\n")
-    .replace(/<[^>]*>/g, "")
+function stripTags(html: string) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|tr|li|h\d)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function pickFirstMatch(hay: string, re: RegExp) {
-  const m = hay.match(re);
-  return m ? m[1] : null;
+function pickBetween(s: string, a: string, b: string) {
+  const i = s.indexOf(a);
+  if (i === -1) return "";
+  const j = s.indexOf(b, i + a.length);
+  if (j === -1) return s.slice(i);
+  return s.slice(i, j);
+}
+
+function extractTimes(s: string) {
+  return s.match(/\b\d{2}:\d{2}\b/g) ?? [];
+}
+
+function isWeekend(d: Date) {
+  const day = d.getDay(); // 0=Sun ... 6=Sat
+  return day === 0 || day === 6;
 }
 
 export async function GET() {
@@ -27,63 +40,66 @@ export async function GET() {
     const res = await fetch(URL, {
       cache: "no-store",
       headers: {
-        "user-agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome Safari",
+        "User-Agent": "Mozilla/5.0 (compatible; STP-Live/1.0)",
+        Accept: "text/html,*/*",
       },
     });
 
+    if (!res.ok) {
+      return NextResponse.json({ error: "fetch_failed", status: res.status }, { status: 200 });
+    }
+
     const html = await res.text();
 
-    // 1) nađi dio oko naslova “Radno vrijeme žičare Sljeme”
-    const idx = html.toLowerCase().indexOf("radno vrijeme žičare sljeme");
+    // samo dio s tablicom žičare (iznad garaže)
+    const relevant = pickBetween(html, "Radno vrijeme žičare Sljeme", "Radno vrijeme garaže");
+    const text = stripTags(relevant);
+
+    // uzmi Gornja postaja red (najčešće 3 vremena: 08:00, 17:00, 18:00)
+    const station = "Gornja postaja";
+    const idx = text.indexOf(station);
     if (idx === -1) {
-      return NextResponse.json({ error: "parse_failed", hint: "Ne nalazim naslov 'Radno vrijeme žičare Sljeme'." }, { status: 200 });
+      return NextResponse.json({ error: "parse_failed", hint: "Ne nalazim 'Gornja postaja'." }, { status: 200 });
     }
 
-    const slice = html.slice(idx, idx + 20000);
+    const slice = text.slice(idx, idx + 220);
+    const times = extractTimes(slice);
 
-    // 2) uzmi prvu <table> nakon tog naslova
-    const tableHtml = pickFirstMatch(slice, /<table[\s\S]*?<\/table>/i);
-    if (!tableHtml) {
-      return NextResponse.json({ error: "parse_failed", hint: "Ne nalazim tablicu radnog vremena žičare." }, { status: 200 });
+    const first = times[0] ?? "08:00";
+    const lastWorkday = times[1] ?? "";
+    const lastWeekend = times[2] ?? "";
+
+    if (!lastWorkday && !lastWeekend) {
+      return NextResponse.json(
+        { error: "parse_failed", hint: "Ne mogu izvući zadnje polaske (radni/vikend)." },
+        { status: 200 }
+      );
     }
 
-    // 3) izvuci redove
-    const tr = tableHtml.match(/<tr[\s\S]*?<\/tr>/gi) || [];
-    // očekujemo header + 4 reda postaja
-    const rows: any[] = [];
+    const today = new Date();
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    for (const rowHtml of tr) {
-      const tds = rowHtml.match(/<(td|th)[\s\S]*?<\/(td|th)>/gi) || [];
-      const cells = tds.map((c) => stripTags(c));
+    const closeToday = isWeekend(today) ? (lastWeekend || lastWorkday) : (lastWorkday || lastWeekend);
+    const closeTomorrow = isWeekend(tomorrow) ? (lastWeekend || lastWorkday) : (lastWorkday || lastWeekend);
 
-      // preskoči header/redove koji nemaju dovoljno kolona
-      // cilj nam je format:
-      // [Lokacija polaska, 08:00 h, 16:30 h, 17:30 h] ili slično
-      if (cells.length < 4) continue;
-
-      const station = cells[0];
-      const first = cells[1]?.replace(/\s*h$/i, "").trim();
-      const lastWeekday = cells[2]?.replace(/\s*h$/i, "").trim();
-      const lastWeekend = cells[3]?.replace(/\s*h$/i, "").trim();
-
-      // preskoči ako je prvi cell i dalje “Lokacija polaska”
-      if (/lokacija polaska/i.test(station)) continue;
-
-      rows.push({
-        station,
-        first,
-        lastWeekday,
-        lastWeekend,
-      });
-    }
-
-    return NextResponse.json({
-      rows,
-      updatedAt: new Date().toISOString(),
-      source: URL,
-    });
+    return NextResponse.json(
+      {
+        today: {
+          open: first,
+          close: closeToday,
+          mode: isWeekend(today) ? "vikend" : "radni",
+        },
+        tomorrow: {
+          open: first,
+          close: closeTomorrow,
+          mode: isWeekend(tomorrow) ? "vikend" : "radni",
+        },
+        sourceUrl: URL,
+        fetchedAt: new Date().toISOString(),
+      },
+      { status: 200 }
+    );
   } catch (e: any) {
-    return NextResponse.json({ error: "fetch_failed", details: String(e?.message || e) }, { status: 200 });
+    return NextResponse.json({ error: "unexpected", details: String(e?.message ?? e) }, { status: 200 });
   }
 }
