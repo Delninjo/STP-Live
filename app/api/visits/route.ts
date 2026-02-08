@@ -13,12 +13,21 @@ export async function POST(request: Request) {
   }
 
   try {
-    const userAgent = request.headers.get("user-agent") ?? null;
+    const recent =
+  await sql`select 1
+            from user_visits
+            where user_id = ${user.id}
+              and created_at > now() - interval '5 minutes'
+            limit 1`;
 
-    await sql`
-      insert into user_visits (user_id, user_agent)
-      values (${user.id}::uuid, ${userAgent})
-    `;
+if (recent.length > 0) {
+  return NextResponse.json({ ok: true, skipped: true });
+}
+
+
+if (recent.length > 0) {
+  return NextResponse.json({ ok: true, skipped: true });
+}
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
