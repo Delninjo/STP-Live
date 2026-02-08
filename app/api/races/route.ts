@@ -202,7 +202,7 @@ async function fromUciDhHr(): Promise<Race[]> {
       // probaj naći array sa poljima title/name + startDate
       const eventsArr =
         candidates.find((arr) =>
-          arr.some((x) => x && (x.name || x.title) && (x.startDate || x.start_date || x.date))
+          arr.some((x: any) => x && (x.name || x.title) && (x.startDate || x.start_date || x.date))
         ) || [];
 
       for (const e of eventsArr) {
