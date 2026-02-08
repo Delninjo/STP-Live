@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useState } from "react";
 const DOGOVORI_SECRET = "STP123";
 const PREDEFINED_NAMES = ["Denis", "Ciba", "Szabo", "Magić", "Kerrdog"];
 
-type Tab = "Vrijeme" | "Kamera" | "Dogovori" | "YouTube" | "Žičara";
+type Tab = "Vrijeme" | "Kamera" | "Dogovori" | "YouTube" | "Radno vrijeme";
 
 export default function Tabs() {
   const [tab, setTab] = useState<Tab>("Vrijeme");
@@ -14,7 +14,7 @@ export default function Tabs() {
   return (
     <>
       <div className="tabs">
-        {(["Vrijeme", "Kamera", "Dogovori", "YouTube", "Žičara"] as Tab[]).map((t) => (
+        {(["Vrijeme", "Kamera", "Dogovori", "YouTube", "Radno vrijeme"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -29,7 +29,8 @@ export default function Tabs() {
       {tab === "Kamera" && <Camera />}
       {tab === "Dogovori" && <Dogovori />}
       {tab === "YouTube" && <YouTubeLatest />}
-      {tab === "Žičara" && <Cablecar />}
+      {tab === "Radno vrijeme" && <WorkHours />}
+
     </>
   );
 }
