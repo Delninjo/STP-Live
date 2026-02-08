@@ -221,7 +221,10 @@ function Weather() {
 
           <Card title="Sljedećih 7 dana">
             {fc.daily.map((d: any) => (
-              <div key={d.date} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+              <div
+                key={d.date}
+                style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}
+              >
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <div style={{ fontWeight: 900 }}>{d.date}</div>
                   <div style={{ fontWeight: 900 }}>
@@ -320,6 +323,8 @@ function YouTubeLatest() {
     </section>
   );
 }
+
+// ===================== AUTH PANEL =====================
 function AuthPanel({ onAuth }: { onAuth: () => void }) {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [user, setUser] = useState<any>(null);
@@ -445,15 +450,8 @@ function AuthPanel({ onAuth }: { onAuth: () => void }) {
     </Card>
   );
 }
+
 // ===================== DOGOVORI (ADD/EDIT/DELETE) =====================
-
-const [me, setMe] = useState<any>(null);
-
-const loadMe = async () => {
-  const r = await fetch("/api/auth/me", { cache: "no-store" });
-  const j = await r.json();
-  setMe(j.user ?? null);
-};
 function Dogovori() {
   const [items, setItems] = useState<any[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -580,16 +578,21 @@ function Dogovori() {
     }
   };
 
- useEffect(() => {
-  load();
-  loadMe();
-}, []);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useRefreshOnForeground(load);
 
   return (
     <section>
-      <AuthPanel onAuth={() => { loadMe(); load(); }} />
+      <AuthPanel
+        onAuth={() => {
+          load();
+        }}
+      />
+
       <Card title={editingId ? "Uredi dogovor" : "Dogovori"}>
         {err && <div style={{ color: "#ff6b8a", marginBottom: 10 }}>{err}</div>}
 
@@ -700,30 +703,10 @@ function Dogovori() {
 function CablecarToday() {
   // raspored prema tablici koju si poslao (bez parkinga)
   const SCHEDULE = [
-    {
-      station: "Donja postaja",
-      first: "08:00",
-      lastWeekday: "16:30",
-      lastWeekend: "17:30",
-    },
-    {
-      station: "Međupostaja Brestovac (prema vrhu)",
-      first: "08:00",
-      lastWeekday: "16:30",
-      lastWeekend: "17:30",
-    },
-    {
-      station: "Međupostaja Brestovac (prema dolje)",
-      first: "08:00",
-      lastWeekday: "17:00",
-      lastWeekend: "18:00",
-    },
-    {
-      station: "Gornja postaja",
-      first: "08:00",
-      lastWeekday: "17:00",
-      lastWeekend: "18:00",
-    },
+    { station: "Donja postaja", first: "08:00", lastWeekday: "16:30", lastWeekend: "17:30" },
+    { station: "Međupostaja Brestovac (prema vrhu)", first: "08:00", lastWeekday: "16:30", lastWeekend: "17:30" },
+    { station: "Međupostaja Brestovac (prema dolje)", first: "08:00", lastWeekday: "17:00", lastWeekend: "18:00" },
+    { station: "Gornja postaja", first: "08:00", lastWeekday: "17:00", lastWeekend: "18:00" },
   ] as const;
 
   const isWeekend = useMemo(() => {
@@ -750,16 +733,12 @@ function CablecarToday() {
     return day === 0 || day === 6;
   }, []);
 
-  // “danas radimo do …” — uzmi najkasniji zadnji polazak (gornja postaja je realno najbitnija, ali uzet ćemo max)
   const todayLast = useMemo(() => {
     const lasts = SCHEDULE.map((s) => (isWeekend ? s.lastWeekend : s.lastWeekday));
     return lasts.sort().slice(-1)[0] || "";
   }, [SCHEDULE, isWeekend]);
 
-  const tomorrowFirst = useMemo(() => {
-    // po tablici uvijek 08:00
-    return "08:00";
-  }, []);
+  const tomorrowFirst = useMemo(() => "08:00", []);
 
   const tomorrowLast = useMemo(() => {
     const lasts = SCHEDULE.map((s) => (tomorrowIsWeekend ? s.lastWeekend : s.lastWeekday));
@@ -793,13 +772,7 @@ function CablecarToday() {
           {SCHEDULE.map((s) => {
             const last = isWeekend ? s.lastWeekend : s.lastWeekday;
             return (
-              <div
-                key={s.station}
-                style={{
-                  padding: "12px 0",
-                  borderTop: "1px solid rgba(255,255,255,0.08)",
-                }}
-              >
+              <div key={s.station} style={{ padding: "12px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
                 <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 6 }}>{s.station}</div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
@@ -822,6 +795,7 @@ function CablecarToday() {
     </section>
   );
 }
+
 // ===================== UTRKE =====================
 function Races() {
   const [items, setItems] = React.useState<any[]>([]);
@@ -833,11 +807,9 @@ function Races() {
     if (!v) return null;
     const s = String(v).trim();
 
-    // already YYYY-MM-DD
     const m1 = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (m1) return `${m1[1]}-${m1[2]}-${m1[3]}`;
 
-    // dd.mm.yyyy or dd/mm/yyyy
     const m2 = s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})/);
     if (m2) {
       const dd = String(m2[1]).padStart(2, "0");
@@ -846,14 +818,13 @@ function Races() {
       return `${yy}-${mm}-${dd}`;
     }
 
-    // fallback: try Date parse
     const d = new Date(s);
     if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
 
     return null;
   };
 
-  const monthKey = (iso: string) => iso.slice(0, 7); // YYYY-MM
+  const monthKey = (iso: string) => iso.slice(0, 7);
   const monthLabelHR = (ym: string) => {
     const [y, m] = ym.split("-").map((x) => parseInt(x, 10));
     const months = [
@@ -874,7 +845,6 @@ function Races() {
   };
 
   const isPast = (iso: string) => {
-    // past if before today (local)
     const today = new Date();
     const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const d = new Date(iso + "T00:00:00");
@@ -895,13 +865,12 @@ function Races() {
 
       const raw = (data.items ?? data.races ?? []) as any[];
 
-      // normalize + filter (UCI only DHI in HR is already handled server-side ideally)
       const normalized = raw
         .map((r) => {
           const iso = toISODate(r.date);
           return {
             ...r,
-            _iso: iso, // for sorting / filtering
+            _iso: iso,
             title: String(r.title ?? "").trim(),
             location: String(r.location ?? "").trim(),
             url: String(r.url ?? "").trim(),
@@ -909,9 +878,8 @@ function Races() {
             discipline: r.discipline ? String(r.discipline).trim() : "",
           };
         })
-        .filter((r) => r.title && r.url); // basic sanity
+        .filter((r) => r.title && r.url);
 
-      // sort by date then title
       normalized.sort((a, b) => {
         const da = a._iso ?? "9999-12-31";
         const db = b._iso ?? "9999-12-31";
@@ -931,18 +899,16 @@ function Races() {
     load();
   }, []);
 
-  // derived lists
   const todayIso = new Date().toISOString().slice(0, 10);
 
   const visible = items.filter((r) => {
-    if (!r._iso) return true; // keep if unknown date
+    if (!r._iso) return true;
     if (showPast) return true;
     return !isPast(r._iso);
   });
 
   const nextRace = visible.find((r) => r._iso && r._iso >= todayIso) ?? visible[0] ?? null;
 
-  // group by month
   const groups = visible.reduce((acc: Record<string, any[]>, r) => {
     const k = r._iso ? monthKey(r._iso) : "unknown";
     acc[k] = acc[k] || [];
@@ -1012,7 +978,6 @@ function Races() {
 
         {!err && !loading && visible.length === 0 && <div className="small">Nema pronađenih utrka.</div>}
 
-        {/* NEXT RACE HIGHLIGHT */}
         {nextRace && (
           <div
             style={{
@@ -1057,7 +1022,6 @@ function Races() {
           </div>
         )}
 
-        {/* GROUPED LIST */}
         {orderedKeys.map((k) => (
           <div key={k} style={{ marginTop: 14 }}>
             <div style={{ fontWeight: 900, marginBottom: 8, opacity: 0.95 }}>
@@ -1088,14 +1052,7 @@ function Races() {
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
                       <div style={{ fontWeight: 900 }}>{r.title}</div>
                       {dateLabel && (
-                        <div
-                          style={{
-                            fontSize: 12,
-                            fontWeight: 900,
-                            opacity: 0.9,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.9, whiteSpace: "nowrap" }}>
                           {dateLabel}
                         </div>
                       )}
@@ -1121,22 +1078,18 @@ function Races() {
     </section>
   );
 }
-// ===================== HELPERS =====================
 
-// helper: accept ISO time/date strings or "HH:MM" and return "HH:MM"
+// ===================== HELPERS =====================
 function normalizeHHMM(v: any): string {
   if (!v) return "";
   const s = String(v).trim();
 
-  // ISO like 1899-12-30T09:30:00.000Z -> extract
   const mIso = s.match(/T(\d{2}:\d{2}):\d{2}/);
   if (mIso) return mIso[1];
 
-  // HH:MM or HH:MM:SS
   const mHM = s.match(/^(\d{1,2}):(\d{2})/);
   if (mHM) return String(mHM[1]).padStart(2, "0") + ":" + mHM[2];
 
-  // AM/PM e.g. 02:47 AM
   const mAmPm = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
   if (mAmPm) {
     let hh = parseInt(mAmPm[1], 10);
@@ -1150,12 +1103,10 @@ function normalizeHHMM(v: any): string {
   return s;
 }
 
-// pokušaj pogoditi ikonu iz WMO koda ili teksta
 function weatherIcon(condition: any): string {
   if (condition == null) return "🌤️";
   const s = String(condition).toLowerCase().trim();
 
-  // WMO weather code (Open-Meteo standard): 0..99
   const n = Number(s);
   if (!Number.isNaN(n)) {
     if (n === 0) return "☀️";
@@ -1169,7 +1120,6 @@ function weatherIcon(condition: any): string {
     return "🌤️";
   }
 
-  // fallback po tekstu
   if (s.includes("thunder") || s.includes("grml") || s.includes("oluj")) return "⛈️";
   if (s.includes("snow") || s.includes("snij")) return "❄️";
   if (s.includes("rain") || s.includes("kiš") || s.includes("pljus")) return "🌧️";
@@ -1178,4 +1128,3 @@ function weatherIcon(condition: any): string {
   if (s.includes("sun") || s.includes("ved")) return "☀️";
   return "🌤️";
 }
-
