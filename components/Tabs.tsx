@@ -447,6 +447,14 @@ function AuthPanel({ onAuth }: { onAuth: () => void }) {
   );
 }
 // ===================== DOGOVORI (ADD/EDIT/DELETE) =====================
+
+const [me, setMe] = useState<any>(null);
+
+const loadMe = async () => {
+  const r = await fetch("/api/auth/me", { cache: "no-store" });
+  const j = await r.json();
+  setMe(j.user ?? null);
+};
 function Dogovori() {
   const [items, setItems] = useState<any[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -573,14 +581,16 @@ function Dogovori() {
     }
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+ useEffect(() => {
+  load();
+  loadMe();
+}, []);
 
   useRefreshOnForeground(load);
 
   return (
     <section>
+      <AuthPanel onAuth={() => { loadMe(); load(); }} />
       <Card title={editingId ? "Uredi dogovor" : "Dogovori"}>
         {err && <div style={{ color: "#ff6b8a", marginBottom: 10 }}>{err}</div>}
 
