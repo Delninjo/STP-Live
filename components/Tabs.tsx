@@ -122,28 +122,8 @@ function Profile({ me, onAuth }: { me: Me; onAuth: () => void }) {
   const [lb, setLb] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const [category, setCategory] = useState<string>("ride_climb");
-  const [note, setNote] = useState("");
-  const [occurredOn, setOccurredOn] = useState<string>(""); // yyyy-mm-dd
-  const [busy, setBusy] = useState(false);
-
-  const CATEGORY_LABELS: Record<string, string> = {
-    ride_climb: "Vožnja uspon (3 boda)",
-    work: "Radna akcija (2 boda)",
-    training: "Trening (2 boda)",
-    race: "Utrka (2 boda)",
-    ride_emtb: "Vožnja e-MTB (1 bod)",
-    ride_cablecar: "Vožnja žičara (0 bodova)",
-  };
-
   const load = async () => {
-    setErr(null);
-
-    if (!me) {
-      setData(null);
-      setLb(null);
-      return;
-    }
+    if (!me) return;
 
     try {
       const [p, l] = await Promise.all([
@@ -151,208 +131,69 @@ function Profile({ me, onAuth }: { me: Me; onAuth: () => void }) {
         fetch("/api/activities", { cache: "no-store" }).then((r) => r.json()),
       ]);
 
-      if (!p.ok) {
-        setErr(p.error || "profile_error");
-        setData(null);
-      } else {
-        setData(p);
-      }
-
-      if (l.ok) setLb(l);
+      setData(p.ok ? p : null);
+      setLb(l.ok ? l : null);
     } catch {
-      setErr("Ne mogu dohvatiti profil.");
+      setErr("Greška pri dohvaćanju profila.");
     }
   };
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me?.id]);
 
-  useRefreshOnForeground(load);
-
-  const addActivity = async () => {
-    setBusy(true);
-    setErr(null);
-    try {
-      const payload: any = { category, note: note.trim() };
-      if (occurredOn) payload.occurredOn = occurredOn;
-
-      const r = await fetch("/api/activities", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const j = await r.json();
-      if (!j.ok) {
-        setErr(j.error || "add_failed");
-        return;
-      }
-
-      setNote("");
-      setOccurredOn("");
-      await load();
-    } catch {
-      setErr("Ne mogu upisati aktivnost.");
-    } finally {
-      setBusy(false);
-    }
-  };
+  if (!me) {
+    return (
+      <section>
+        <Card title="Profil">
+          <div className="small">Moraš se ulogirati.</div>
+          <AuthPanel onAuth={onAuth} />
+        </Card>
+      </section>
+    );
+  }
 
   return (
     <section>
-      {!me ? (
-        <Card title="Profil">
-          <div className="small" style={{ marginBottom: 10 }}>
-            Za profil / bodove / ranking moraš se ulogirati.
-          </div>
-          <AuthPanel onAuth={onAuth} />
+      <AuthPanel onAuth={() => { onAuth(); load(); }} />
+
+      {err && <div style={{ color: "#ff6b8a" }}>{err}</div>}
+
+      {data?.user && (
+        <Card title="Moj profil">
+          <Row k="Ime" v={data.user.displayName} />
+          <Row k="Email" v={data.user.email} />
+          <Row k="Bodovi" v={String(data.stats?.pointsTotal ?? 0)} />
+          <Row k="Aktivnosti" v={String(data.stats?.activitiesTotal ?? 0)} />
+          <Row
+            k="Badge"
+            v={`${data.stats?.badge?.emoji ?? "🏷️"} ${data.stats?.badge?.label ?? "—"}`}
+          />
         </Card>
-      ) : (
-        <>
-          <AuthPanel onAuth={() => { onAuth(); load(); }} />
+      )}
 
-          {err && <div style={{ color: "#ff6b8a", marginBottom: 10 }}>{err}</div>}
-
-          {data?.user && (
-  <Card title="Moj profil">
-    <Row k="Ime" v={String(data.user.displayName)} />
-    <Row k="Email" v={String(data.user.email)} />
-    <Row k="Bodovi (ukupno)" v={String(data.stats?.pointsTotal ?? 0)} />
-    <Row k="Aktivnosti (ukupno)" v={String(data.stats?.activitiesTotal ?? 0)} />
-
-    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "6px 0" }}>
-      <div className="small" style={{ opacity: 0.85 }}>Badge</div>
-      <div style={{ fontWeight: 900 }}>
-        <span style={{ marginRight: 8 }}>{data.stats?.badge?.emoji ?? "🏷️"}</span>
-        {data.stats?.badge?.label ?? "—"}
-      </div>
-    </div>
-  </Card>
-)}
-          <Card title="Dodaj aktivnost">
-            <div className="small" style={{ marginBottom: 6 }}>
-              Kategorija
+      {lb?.leaderboard && (
+        <Card title="Leaderboard">
+          {lb.leaderboard.map((r: any, i: number) => (
+            <div key={r.userId} style={{ padding: "8px 0" }}>
+              <b>
+                #{i + 1} {r.displayName}
+              </b>{" "}
+              – {r.pointsTotal} bod
+              <div className="small">
+                zadnja aktivnost:{" "}
+                {r.lastActivityAt
+                  ? new Date(r.lastActivityAt).toLocaleString("hr-HR")
+                  : "—"}
+              </div>
             </div>
-            <select className="inp" value={category} onChange={(e) => setCategory(e.target.value)}>
-              {Object.keys(CATEGORY_LABELS).map((k) => (
-                <option key={k} value={k}>
-                  {CATEGORY_LABELS[k]}
-                </option>
-              ))}
-            </select>
+          ))}
+        </Card>
+      )}
+    </section>
+  );
+}
 
-            <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
-              Datum (opcionalno)
-            </div>
-            <input className="inp" type="date" value={occurredOn} onChange={(e) => setOccurredOn(e.target.value)} />
-
-            <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
-              Napomena (opcionalno)
-            </div>
-            <input className="inp" value={note} onChange={(e) => setNote(e.target.value)} placeholder="npr. Sljeme, 2h" />
-
-            <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button className="btn btnPrimary" onClick={addActivity} disabled={busy}>
-                Upis
-              </button>
-              <button className="btn" onClick={load} disabled={busy}>
-                Osvježi
-              </button>
-            </div>
-          </Card>
-
-          {data?.byCategory && (
-            <Card title="Po kategorijama">
-              {data.byCategory.length === 0 ? (
-                <div className="small">Nema aktivnosti.</div>
-              ) : (
-                data.byCategory.map((x: any) => (
-                  <div key={x.category} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                      <div style={{ fontWeight: 900 }}>{x.category}</div>
-                      <div style={{ fontWeight: 900 }}>{x.points} bod</div>
-                    </div>
-                    <div className="small">broj: {x.count}</div>
-                  </div>
-                ))
-              )}
-            </Card>
-          )}
-
-          {data?.visits && (
-            <Card title="Zadnji dolasci (posjeti)">
-              {data.visits.length === 0 ? (
-                <div className="small">Nema posjeta.</div>
-              ) : (
-                data.visits.slice(0, 15).map((v: any, i: number) => (
-                  <div key={i} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                    <div style={{ fontWeight: 900 }}>{String(v.createdAt)}</div>
-                    <div className="small" style={{ opacity: 0.8 }}>
-                      {String(v.userAgent || "").slice(0, 120)}
-                    </div>
-                  </div>
-                ))
-              )}
-            </Card>
-          )}
-
-          {data?.activities && (
-            <Card title="Zadnje aktivnosti">
-              {data.activities.length === 0 ? (
-                <div className="small">Nema aktivnosti.</div>
-              ) : (
-                data.activities.slice(0, 15).map((a: any) => (
-                  <div key={a.id} style={{ padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                      <div style={{ fontWeight: 900 }}>{a.category}</div>
-                      <div style={{ fontWeight: 900 }}>{a.points} bod</div>
-                    </div>
-                    <div className="small">
-                      datum: {String(a.occurredOn || "").slice(0, 10)} • upis: {String(a.createdAt)}
-                    </div>
-                    {a.note && <div className="small" style={{ opacity: 0.9, marginTop: 4 }}>{a.note}</div>}
-                  </div>
-                ))
-              )}
-            </Card>
-          )}
-
-          {lb?.leaderboard && (
-  <Card title="Ranking (leaderboard)">
-    {lb.leaderboard.slice(0, 15).map((r: any, idx: number) => (
-      <div
-        key={r.userId}
-        style={{
-          padding: "10px 0",
-          borderTop: "1px solid rgba(255,255,255,0.08)",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-          <div style={{ fontWeight: 900 }}>
-            #{idx + 1} {r.displayName}
-            {me?.id === r.userId ? " (ti)" : ""}
-          </div>
-
-          <div style={{ fontWeight: 900 }}>
-            {r.pointsTotal} bod
-          </div>
-        </div>
-
-        <div className="small">
-          aktivnosti: {r.activitiesTotal}
-        </div>
-
-        <div className="small" style={{ opacity: 0.7 }}>
-          zadnja aktivnost:{" "}
-          {r.lastActivityAt
-            ? new Date(r.lastActivityAt).toLocaleString("hr-HR")
-            : "—"}
-        </div>
-      </div>
-    ))}
-  </Card>
-)}
 
 
 // ===================== AUTH PANEL =====================
