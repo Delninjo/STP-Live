@@ -13,6 +13,7 @@ type Me = { id: string; email: string; displayName: string } | null;
 export default function Tabs() {
   const [tab, setTab] = useState<Tab>("Profil");
   const [me, setMe] = useState<Me>(null);
+  const visitSentRef = useRef(false);
 
   const refreshMe = async () => {
     try {
@@ -24,24 +25,26 @@ export default function Tabs() {
     }
   };
 
-  useEffect(() => {
-    refreshMe();
+useEffect(() => {
+  refreshMe();
 
-    // upiši posjet max 1x u 5 min (debounce u localStorage)
-try {
-  const KEY = "stp_last_visit_ping";
-  const now = Date.now();
-  const last = Number(localStorage.getItem(KEY) || "0");
-  const fiveMin = 5 * 60 * 1000;
+  try {
+    const KEY = "stp_last_visit_ping";
+    const now = Date.now();
+    const last = Number(localStorage.getItem(KEY) || "0");
+    const fiveMin = 5 * 60 * 1000;
 
-  if (now - last > fiveMin) {
-    localStorage.setItem(KEY, String(now));
+    if (now - last > fiveMin) {
+      localStorage.setItem(KEY, String(now));
+      fetch("/api/visits", { method: "POST" }).catch(() => {});
+    }
+  } catch {
     fetch("/api/visits", { method: "POST" }).catch(() => {});
   }
-} catch {
-  // ako localStorage nije dostupan (npr. privacy mode), svejedno pokušaj 1x
-  fetch("/api/visits", { method: "POST" }).catch(() => {});
-}
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+
   return (
     <>
       <div
