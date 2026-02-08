@@ -1,9 +1,3 @@
-import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
-import { sql } from "@/lib/db";
-
-export const runtime = "nodejs";
-
 export async function POST(request: Request) {
   const session = await getSession();
   const user = session.user;
@@ -13,73 +7,33 @@ export async function POST(request: Request) {
   }
 
   try {
-    const recent =
-  await sql`select 1
-            from user_visits
-            where user_id = ${user.id}
-              and created_at > now() - interval '5 minutes'
-            limit 1`;
-
-if (recent.length > 0) {
-  return NextResponse.json({ ok: true, skipped: true });
-}
-
-
-if (recent.length > 0) {
-  return NextResponse.json({ ok: true, skipped: true });
-}
-
-    return NextResponse.json({ ok: true });
-  } catch (e: any) {
-    return NextResponse.json(
-      { ok: false, error: "db_error", details: String(e?.message || e) },
-      { status: 500 }
-    );
-  }
-}
-
-export async function GET() {
-  const session = await getSession();
-  const me = session.user;
-
-  if (!me) {
-    return NextResponse.json({ ok: false, error: "not_logged_in" }, { status: 401 });
-  }
-
-  try {
-    const recentMine = await sql`
-      select created_at, user_agent
+    // postoji li visit u zadnjih 5 min
+    const recent = await sql`
+      select 1
       from user_visits
-      where user_id = ${me.id}::uuid
-      order by created_at desc
-      limit 20
+      where user_id = ${user.id}::text
+        and created_at > now() - interval '5 minutes'
+      limit 1
     `;
 
-    const leaderboard = await sql`
-      select
-        uv.user_id,
-        au.display_name,
-        count(*)::int as visits_total,
-        max(uv.created_at) as last_seen_at
-      from user_visits uv
-      left join app_users au on au.id = uv.user_id
-      group by uv.user_id, au.display_name
-      order by last_seen_at desc nulls last, visits_total desc
-      limit 50
+    // ako postoji → preskoči upis
+    if (recent.length > 0) {
+      return NextResponse.json({ ok: true, skipped: true });
+    }
+
+    // inače → upiši novi visit
+    const ua = request.headers.get("user-agent") || null;
+    const ip =
+      request.headers.get("x-forwarded-for") ||
+      request.headers.get("x-real-ip") ||
+      null;
+
+    await sql`
+      insert into user_visits (user_id, user_agent, ip)
+      values (${user.id}::text, ${ua}, ${ip})
     `;
 
-    return NextResponse.json({
-      ok: true,
-      mine: { userId: me.id, displayName: me.displayName },
-      recentMine,
-      leaderboard: leaderboard.map((r: any) => ({
-        userId: String(r.user_id),
-        displayName: r.display_name == null ? "Unknown" : String(r.display_name),
-        visitsTotal: Number(r.visits_total),
-        lastSeenAt: r.last_seen_at,
-      })),
-      updatedAt: new Date().toISOString(),
-    });
+    return NextResponse.json({ ok: true, inserted: true });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: "db_error", details: String(e?.message || e) },
