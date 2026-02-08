@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useState } from "react";
 const DOGOVORI_SECRET = "STP123";
 const PREDEFINED_NAMES = ["Denis", "Ciba", "Szabo", "Magić", "Kerrdog"];
 
-type Tab = "Vrijeme" | "Kamera" | "Dogovori" | "YouTube" | "Radno vrijeme";
+type Tab = "Vrijeme" | "Kamera" | "Dogovori" | "YouTube" | "Radno vrijeme" | "Utrke";
 
 export default function Tabs() {
   const [tab, setTab] = useState<Tab>("Vrijeme");
@@ -14,7 +14,7 @@ export default function Tabs() {
   return (
     <>
       <div className="tabs">
-        {(["Vrijeme", "Kamera", "Dogovori", "YouTube", "Radno vrijeme"] as Tab[]).map((t) => (
+        {(["Vrijeme", "Kamera", "Dogovori", "YouTube", "Radno vrijeme", "Utrke"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -30,6 +30,7 @@ export default function Tabs() {
       {tab === "Dogovori" && <Dogovori />}
       {tab === "YouTube" && <YouTubeLatest />}
       {tab === "Radno vrijeme" && <WorkHours />}
+      {tab === "Utrke" && <Races />}
 
     </>
   );
@@ -685,6 +686,61 @@ function Dogovori() {
             );
           })
         )}
+      </Card>
+    </section>
+  );
+}
+
+function Races() {
+  const [items, setItems] = useState<any[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = async () => {
+    try {
+      const data = await fetch("/api/races", { cache: "no-store" }).then((r) => r.json());
+      if (data.error) setErr("Ne mogu dohvatiti utrke.");
+      else setItems(data.items ?? []);
+    } catch {
+      setErr("Ne mogu dohvatiti utrke.");
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  useRefreshOnForeground(load);
+
+  return (
+    <section>
+      <Card title="MTB utrke">
+        {err && <div style={{ color: "#ff6b8a" }}>{err}</div>}
+
+        {items.length === 0 && !err && <div className="small">Nema utrka.</div>}
+
+        <div style={{ display: "grid", gap: 10 }}>
+          {items.map((x) => (
+            <a
+              key={x.url}
+              href={x.url}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                padding: 12,
+                borderRadius: 16,
+                border: "1px solid rgba(255,255,255,0.10)",
+                background: "rgba(0,0,0,0.20)",
+                color: "var(--text)",
+                textDecoration: "none",
+              }}
+            >
+              <div style={{ fontWeight: 900 }}>{x.title}</div>
+              <div className="small" style={{ marginTop: 4, opacity: 0.7 }}>
+                {x.source}
+              </div>
+            </a>
+          ))}
+        </div>
       </Card>
     </section>
   );
