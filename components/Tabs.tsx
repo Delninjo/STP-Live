@@ -1,6 +1,7 @@
-import ProfileTab from "@/components/ProfileTab";
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import ProfileTab from "@/components/ProfileTab";
 
 // ====== PODESI OVO ======
 const DOGOVORI_SECRET = "STP123";
