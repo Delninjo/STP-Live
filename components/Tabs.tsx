@@ -694,20 +694,99 @@ function Races() {
   const [items, setItems] = React.useState<any[]>([]);
   const [err, setErr] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [showPast, setShowPast] = React.useState(false);
+
+  const toISODate = (v: any): string | null => {
+    if (!v) return null;
+    const s = String(v).trim();
+
+    // already YYYY-MM-DD
+    const m1 = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m1) return `${m1[1]}-${m1[2]}-${m1[3]}`;
+
+    // dd.mm.yyyy or dd/mm/yyyy
+    const m2 = s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})/);
+    if (m2) {
+      const dd = String(m2[1]).padStart(2, "0");
+      const mm = String(m2[2]).padStart(2, "0");
+      const yy = m2[3];
+      return `${yy}-${mm}-${dd}`;
+    }
+
+    // fallback: try Date parse
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+
+    return null;
+  };
+
+  const monthKey = (iso: string) => iso.slice(0, 7); // YYYY-MM
+  const monthLabelHR = (ym: string) => {
+    const [y, m] = ym.split("-").map((x) => parseInt(x, 10));
+    const months = [
+      "Siječanj",
+      "Veljača",
+      "Ožujak",
+      "Travanj",
+      "Svibanj",
+      "Lipanj",
+      "Srpanj",
+      "Kolovoz",
+      "Rujan",
+      "Listopad",
+      "Studeni",
+      "Prosinac",
+    ];
+    return `${months[(m || 1) - 1]} ${y}`;
+  };
+
+  const isPast = (iso: string) => {
+    // past if before today (local)
+    const today = new Date();
+    const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const d = new Date(iso + "T00:00:00");
+    return d.getTime() < t.getTime();
+  };
 
   const load = async () => {
     setErr(null);
+    setLoading(true);
     try {
       const res = await fetch("/api/races", { cache: "no-store" });
       const data = await res.json();
 
-      if (data.error) {
-        setErr(data.error);
+      if (data?.error) {
+        setErr(String(data.error));
         return;
       }
 
-      // podrška i za items i za races (ovisno o API verziji)
-      setItems(data.items ?? data.races ?? []);
+      const raw = (data.items ?? data.races ?? []) as any[];
+
+      // normalize + filter (UCI only DHI in HR is already handled server-side ideally)
+      const normalized = raw
+        .map((r) => {
+          const iso = toISODate(r.date);
+          return {
+            ...r,
+            _iso: iso, // for sorting / filtering
+            title: String(r.title ?? "").trim(),
+            location: String(r.location ?? "").trim(),
+            url: String(r.url ?? "").trim(),
+            source: String(r.source ?? "").trim(),
+            discipline: r.discipline ? String(r.discipline).trim() : "",
+          };
+        })
+        .filter((r) => r.title && r.url); // basic sanity
+
+      // sort by date then title
+      normalized.sort((a, b) => {
+        const da = a._iso ?? "9999-12-31";
+        const db = b._iso ?? "9999-12-31";
+        if (da !== db) return da.localeCompare(db);
+        return a.title.localeCompare(b.title);
+      });
+
+      setItems(normalized);
     } catch {
       setErr("Ne mogu dohvatiti utrke.");
     } finally {
@@ -719,45 +798,192 @@ function Races() {
     load();
   }, []);
 
+  // derived lists
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  const visible = items.filter((r) => {
+    if (!r._iso) return true; // keep if unknown date
+    if (showPast) return true;
+    return !isPast(r._iso);
+  });
+
+  const nextRace = visible.find((r) => r._iso && r._iso >= todayIso) ?? visible[0] ?? null;
+
+  // group by month
+  const groups = visible.reduce((acc: Record<string, any[]>, r) => {
+    const k = r._iso ? monthKey(r._iso) : "unknown";
+    acc[k] = acc[k] || [];
+    acc[k].push(r);
+    return acc;
+  }, {});
+
+  const orderedKeys = Object.keys(groups).sort((a, b) => {
+    if (a === "unknown") return 1;
+    if (b === "unknown") return -1;
+    return a.localeCompare(b);
+  });
+
+  const SourcePill = ({ s }: { s: string }) => {
+    const label = s?.toLowerCase().includes("uci")
+      ? "UCI (DHI HR)"
+      : s?.toLowerCase().includes("hbs")
+      ? "HBS"
+      : s?.toLowerCase().includes("mtb")
+      ? "mtb.hr"
+      : s || "izvor";
+
+    return (
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "2px 10px",
+          borderRadius: 999,
+          border: "1px solid rgba(255,255,255,0.16)",
+          background: "rgba(0,0,0,0.18)",
+          fontSize: 12,
+          opacity: 0.9,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {label}
+      </span>
+    );
+  };
+
   return (
     <section>
       <Card title="Utrke (MTB)">
-        {loading && <div className="small">Učitavam…</div>}
-        {err && <div style={{ color: "#ff6b8a" }}>{err}</div>}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+          <button className="btn" onClick={load} disabled={loading}>
+            {loading ? "Učitavam…" : "Osvježi"}
+          </button>
 
-        {!loading && !err && items.length === 0 && (
-          <div className="small">Nema pronađenih utrka.</div>
-        )}
+          <label className="small" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={showPast}
+              onChange={(e) => setShowPast(e.target.checked)}
+              style={{ transform: "scale(1.05)" }}
+            />
+            Prikaži prošle utrke
+          </label>
 
-        <div style={{ display: "grid", gap: 10 }}>
-          {items.map((r, i) => (
+          <div className="small" style={{ opacity: 0.75 }}>
+            Izvori: mtb.hr + hbs.hr (HR) + UCI (samo DHI u HR)
+          </div>
+        </div>
+
+        {err && <div style={{ color: "#ff6b8a", marginBottom: 10 }}>{err}</div>}
+
+        {!err && !loading && visible.length === 0 && <div className="small">Nema pronađenih utrka.</div>}
+
+        {/* NEXT RACE HIGHLIGHT */}
+        {nextRace && (
+          <div
+            style={{
+              border: "1px solid rgba(255,255,255,0.14)",
+              borderRadius: 18,
+              padding: 12,
+              background: "rgba(0,0,0,0.22)",
+              marginBottom: 12,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+              <div style={{ fontWeight: 900 }}>Sljedeća utrka</div>
+              <span
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 999,
+                  background: "rgba(255,255,255,0.10)",
+                  border: "1px solid rgba(255,255,255,0.18)",
+                  fontSize: 12,
+                  fontWeight: 900,
+                }}
+              >
+                {nextRace._iso ?? String(nextRace.date ?? "").slice(0, 10)}
+              </span>
+            </div>
+
             <a
-              key={i}
-              href={r.url}
+              href={nextRace.url}
               target="_blank"
               rel="noreferrer"
-              style={{
-                border: "1px solid rgba(255,255,255,0.10)",
-                borderRadius: 16,
-                padding: 12,
-                background: "rgba(0,0,0,0.20)",
-                color: "var(--text)",
-                textDecoration: "none",
-              }}
+              style={{ display: "block", marginTop: 6, color: "var(--text)", textDecoration: "none" }}
             >
-              <div style={{ fontWeight: 900 }}>{r.title}</div>
-
-              <div className="small" style={{ marginTop: 4 }}>
-                {r.date} • {r.location}
+              <div style={{ fontWeight: 900, fontSize: 16 }}>{nextRace.title}</div>
+              <div className="small" style={{ marginTop: 4, opacity: 0.9 }}>
+                {nextRace.location}
               </div>
-
-              <div className="small" style={{ marginTop: 4, opacity: 0.7 }}>
-                {r.source.toUpperCase()}
-                {r.discipline ? ` • ${r.discipline}` : ""}
+              <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <SourcePill s={nextRace.source} />
+                {nextRace.discipline && <SourcePill s={nextRace.discipline} />}
               </div>
             </a>
-          ))}
-        </div>
+          </div>
+        )}
+
+        {/* GROUPED LIST */}
+        {orderedKeys.map((k) => (
+          <div key={k} style={{ marginTop: 14 }}>
+            <div style={{ fontWeight: 900, marginBottom: 8, opacity: 0.95 }}>
+              {k === "unknown" ? "Bez datuma" : monthLabelHR(k)}
+            </div>
+
+            <div style={{ display: "grid", gap: 10 }}>
+              {groups[k].map((r: any, i: number) => {
+                const dateLabel = r._iso ?? String(r.date ?? "").trim();
+                const past = r._iso ? isPast(r._iso) : false;
+
+                return (
+                  <a
+                    key={r.url + i}
+                    href={r.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      borderRadius: 16,
+                      padding: 12,
+                      background: "rgba(0,0,0,0.20)",
+                      color: "var(--text)",
+                      textDecoration: "none",
+                      opacity: !showPast && past ? 0.55 : 1,
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <div style={{ fontWeight: 900 }}>{r.title}</div>
+                      {dateLabel && (
+                        <div
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 900,
+                            opacity: 0.9,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {dateLabel}
+                        </div>
+                      )}
+                    </div>
+
+                    {r.location && (
+                      <div className="small" style={{ marginTop: 4, opacity: 0.9 }}>
+                        {r.location}
+                      </div>
+                    )}
+
+                    <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <SourcePill s={r.source} />
+                      {r.discipline && <SourcePill s={r.discipline} />}
+                    </div>
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </Card>
     </section>
   );
