@@ -360,13 +360,6 @@ function Dogovori() {
     }
   };
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useRefreshOnForeground(load);
-
   const resetForm = () => {
     setEditingId(null);
     setDate("");
@@ -390,14 +383,15 @@ function Dogovori() {
       setName("");
       setCustomName(nm);
     }
+
     setNote(String(x.note || ""));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const save = async () => {
     setErr(null);
-    const finalName = name === "" ? customName.trim() : name;
 
+    const finalName = name === "" ? customName.trim() : name;
     if (!date || !time || !finalName) {
       setErr("Upiši datum, vrijeme i ime.");
       return;
@@ -465,21 +459,36 @@ function Dogovori() {
     }
   };
 
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useRefreshOnForeground(load);
+
   return (
     <section>
       <Card title={editingId ? "Uredi dogovor" : "Dogovori"}>
         {err && <div style={{ color: "#ff6b8a", marginBottom: 10 }}>{err}</div>}
 
-        <div className="small" style={{ marginBottom: 6 }}>Datum</div>
+        <div className="small" style={{ marginBottom: 6 }}>
+          Datum
+        </div>
         <input className="inp" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
 
-        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>Vrijeme (24h)</div>
+        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
+          Vrijeme (24h)
+        </div>
         <input className="inp" type="time" step={60} value={time} onChange={(e) => setTime(e.target.value)} />
 
-        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>Tko dolazi</div>
+        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
+          Tko dolazi
+        </div>
         <select className="inp" value={name} onChange={(e) => setName(e.target.value)}>
           {PREDEFINED_NAMES.map((n) => (
-            <option key={n} value={n}>{n}</option>
+            <option key={n} value={n}>
+              {n}
+            </option>
           ))}
           <option value="">Drugo...</option>
         </select>
@@ -493,7 +502,9 @@ function Dogovori() {
           />
         )}
 
-        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>Napomena (opcionalno)</div>
+        <div className="small" style={{ marginTop: 10, marginBottom: 6 }}>
+          Napomena (opcionalno)
+        </div>
         <input className="inp" placeholder="npr. Tunel" value={note} onChange={(e) => setNote(e.target.value)} />
 
         <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
@@ -536,7 +547,7 @@ function Dogovori() {
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                   <div>
                     <b>
-                      {fmtISODate(d)} {t}
+                      {d} {t}
                     </b>{" "}
                     — {nm}
                     {nt && (
@@ -563,6 +574,7 @@ function Dogovori() {
     </section>
   );
 }
+
 
 /* ===================== RADNO VRIJEME (DANAS) ===================== */
 /**
