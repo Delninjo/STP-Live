@@ -4,9 +4,6 @@ import { sql } from "@/lib/db";
 
 export const runtime = "nodejs";
 
-/**
- * Zapiši "dolazak" (svaki posjet appu)
- */
 export async function POST(request: Request) {
   const session = await getSession();
   const user = session.user;
@@ -20,7 +17,7 @@ export async function POST(request: Request) {
 
     await sql`
       insert into user_visits (user_id, user_agent)
-      values (${user.id}, ${userAgent})
+      values (${user.id}::uuid, ${userAgent})
     `;
 
     return NextResponse.json({ ok: true });
@@ -32,11 +29,6 @@ export async function POST(request: Request) {
   }
 }
 
-/**
- * Dohvati:
- * - moje zadnje posjete (recentMine)
- * - leaderboard posjeta (tko je kad zadnji put došao + broj posjeta)
- */
 export async function GET() {
   const session = await getSession();
   const me = session.user;
@@ -47,11 +39,9 @@ export async function GET() {
 
   try {
     const recentMine = await sql`
-      select
-        created_at,
-        user_agent
+      select created_at, user_agent
       from user_visits
-      where user_id = ${me.id}
+      where user_id = ${me.id}::uuid
       order by created_at desc
       limit 20
     `;
@@ -71,10 +61,7 @@ export async function GET() {
 
     return NextResponse.json({
       ok: true,
-      mine: {
-        userId: me.id,
-        displayName: me.displayName,
-      },
+      mine: { userId: me.id, displayName: me.displayName },
       recentMine,
       leaderboard: leaderboard.map((r: any) => ({
         userId: String(r.user_id),
