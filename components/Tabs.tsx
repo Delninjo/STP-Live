@@ -29,18 +29,16 @@ useEffect(() => {
   refreshMe();
 
   try {
-    const KEY = "stp_last_visit_ping";
-    const now = Date.now();
-    const last = Number(localStorage.getItem(KEY) || "0");
-    const fiveMin = 5 * 60 * 1000;
+  const KEY = "stp_last_visit_ping";
+  const now = Date.now();
+  const last = Number(localStorage.getItem(KEY) || "0");
+  const fiveMin = 5 * 60 * 1000;
 
-    if (now - last > fiveMin) {
-      localStorage.setItem(KEY, String(now));
-      fetch("/api/visits", { method: "POST" }).catch(() => {});
-    }
-  } catch {
-    fetch("/api/visits", { method: "POST" }).catch(() => {});
+  if (now - last > fiveMin) {
+    localStorage.setItem(KEY, String(now));
   }
+} catch {
+}
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
